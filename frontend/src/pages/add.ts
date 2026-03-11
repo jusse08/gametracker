@@ -5,43 +5,43 @@ export function mountAddGameModal() {
     
     // Create animated overlay
     const overlay = document.createElement('div');
-    overlay.className = "fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 ease-out";
+    overlay.className = "fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 ease-out";
     
     // Modal content container
     const modal = document.createElement('div');
-    modal.className = "bg-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl border border-gray-700/50 overflow-hidden transform scale-95 opacity-0 transition-all duration-300 ease-out flex flex-col max-h-[90vh]";
+    modal.className = "gt-panel rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden transform scale-95 opacity-0 transition-all duration-300 ease-out flex flex-col max-h-[90vh]";
     
     modal.innerHTML = `
-        <div class="p-6 border-b border-gray-700/50 flex justify-between items-center bg-gray-800/50">
+        <div class="p-6 border-b border-slate-600/45 flex justify-between items-center bg-slate-900/55">
             <div>
-                <h2 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">Добавить игру</h2>
-                <p class="text-sm text-gray-400 mt-1">Поиск по базе Steam</p>
+                <h2 class="text-2xl font-bold">Добавить игру</h2>
+                <p class="text-sm text-slate-300/80 mt-1">Поиск по базе Steam</p>
             </div>
-            <button id="closeModal" class="text-gray-400 hover:text-white hover:bg-gray-700 p-2 rounded-lg transition-colors">
+            <button id="closeModal" class="text-slate-400 hover:text-white hover:bg-slate-700/60 p-2 rounded-lg transition-colors">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
         
-        <div class="p-6 border-b border-gray-700/50 bg-gray-900/30">
+        <div class="p-6 border-b border-slate-600/45 bg-slate-900/35">
             <form id="searchForm" class="flex gap-3">
                 <div class="relative flex-grow group">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-blue-400 transition-colors">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-cyan-300 transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
-                    <input type="text" id="dbQuery" placeholder="Название игры (напр. Witcher 3)..." class="w-full bg-gray-900 border border-gray-700 rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-inner" required>
+                    <input type="text" id="dbQuery" placeholder="Название игры (напр. Witcher 3)..." class="gt-input pl-10" required>
                 </div>
-                <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-medium transition-all shadow-lg shadow-blue-500/20 whitespace-nowrap">
+                <button type="submit" class="gt-btn gt-btn-primary px-6 py-3 whitespace-nowrap">
                     Найти
                 </button>
             </form>
         </div>
         
-        <div class="flex-grow overflow-y-auto p-6 bg-gray-800">
-            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 border-b border-gray-700/50 pb-2">Результаты поиска</h3>
+        <div class="flex-grow overflow-y-auto p-6 bg-slate-900/35">
+            <h3 class="text-xs font-bold text-slate-300/75 uppercase tracking-wider mb-4 border-b border-slate-600/45 pb-2">Результаты поиска</h3>
             <div id="searchResults" class="space-y-3">
-                <div class="text-center py-10 text-gray-500">
-                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-800 mb-4 border border-gray-700">
-                        <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <div class="text-center py-10 text-slate-400">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-900/60 mb-4 border border-slate-600/45">
+                        <svg class="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <p>Введите название игры для поиска</p>
                 </div>
@@ -102,7 +102,7 @@ export function mountAddGameModal() {
 
             results.forEach((game, idx) => {
                 const el = document.createElement('div');
-                el.className = "group flex items-center justify-between p-4 bg-gray-900 rounded-xl border border-gray-700/50 hover:border-blue-500/50 transition-colors";
+                el.className = "group flex items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-slate-600/45 hover:border-cyan-400/55 transition-colors";
 
                 // Animation stagger
                 el.style.animation = `fadeIn 0.3s ease-out ${idx * 0.05}s both`;
@@ -111,19 +111,19 @@ export function mountAddGameModal() {
 
                 el.innerHTML = `
                     <div class="flex items-center gap-4">
-                        <div class="w-12 h-16 bg-gray-800 rounded flex items-center justify-center border border-gray-700 shrink-0 overflow-hidden">
-                            <img src="${coverUrl}" alt="${game.title}" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'; this.parentElement.innerHTML='<svg class=\\'w-6 h-6 text-gray-500\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></svg>'">
+                        <div class="w-12 h-16 bg-slate-900 rounded flex items-center justify-center border border-slate-600/45 shrink-0 overflow-hidden">
+                            <img src="${coverUrl}" alt="${game.title}" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'; this.parentElement.innerHTML='<svg class=\\'w-6 h-6 text-slate-500\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></svg>'">
                         </div>
                         <div>
-                            <div class="font-medium text-white group-hover:text-blue-400 transition-colors">${game.title}</div>
-                            <div class="text-xs text-gray-500 mt-1">Как синхронизировать игру после добавления?</div>
+                            <div class="font-medium text-white group-hover:text-cyan-200 transition-colors">${game.title}</div>
+                            <div class="text-xs text-slate-400 mt-1">Как синхронизировать игру после добавления?</div>
                         </div>
                     </div>
                     <div class="flex gap-2 shrink-0">
-                        <button class="add-btn bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 text-sm font-medium px-4 py-2 rounded-lg transition-all" data-idx="${idx}" data-sync-type="steam">
+                        <button class="add-btn bg-cyan-400/20 hover:bg-cyan-400/30 text-cyan-200 border border-cyan-300/40 text-sm font-medium px-4 py-2 rounded-lg transition-all" data-idx="${idx}" data-sync-type="steam">
                             Steam
                         </button>
-                        <button class="add-btn bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-sm font-medium px-4 py-2 rounded-lg transition-all" data-idx="${idx}" data-sync-type="agent">
+                        <button class="add-btn bg-lime-400/20 hover:bg-lime-400/30 text-lime-200 border border-lime-300/40 text-sm font-medium px-4 py-2 rounded-lg transition-all" data-idx="${idx}" data-sync-type="agent">
                             Агент
                         </button>
                     </div>

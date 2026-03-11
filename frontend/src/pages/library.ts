@@ -1,33 +1,101 @@
 import { api, type Game } from '../api';
 
+function formatPlaytime(minutes: number): string {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h} ч ${m} мин`;
+}
+
+function statusLabel(status: string): string {
+    if (status === 'playing') return 'Играю';
+    if (status === 'completed') return 'Пройдено';
+    if (status === 'backlog') return 'Запланировано';
+    return status;
+}
+
+function compareGames(a: Game, b: Game, sortBy: string): number {
+    if (sortBy === 'title-asc') return a.title.localeCompare(b.title, 'ru');
+    if (sortBy === 'title-desc') return b.title.localeCompare(a.title, 'ru');
+    if (sortBy === 'playtime-asc') return a.total_playtime_minutes - b.total_playtime_minutes;
+    if (sortBy === 'playtime-desc') return b.total_playtime_minutes - a.total_playtime_minutes;
+    return Date.parse(b.created_at) - Date.parse(a.created_at);
+}
+
+function getQuestText(stats: { playing: number; backlog: number; completed: number; totalMinutes: number }): string {
+    if (stats.playing === 0 && stats.backlog > 0) {
+        return 'Квест дня: выбери игру из бэклога и запусти первую сессию.';
+    }
+    if (stats.totalMinutes < 300) {
+        return 'Квест дня: добей 5 часов общего времени для открытия ранга Scout.';
+    }
+    if (stats.completed < 3) {
+        return 'Квест дня: закрой хотя бы одну игру и пополни зал трофеев.';
+    }
+    return 'Квест дня: синхронизируй достижения и обнови боевой журнал.';
+}
+
 export async function renderLibrary(container: HTMLElement) {
     container.innerHTML = `
-        <div class="mb-8 flex justify-between items-end">
-            <div>
-                <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-500 mb-2">Моя Библиотека</h1>
-                <p class="text-gray-400">Отслеживайте свои игры, время и прогресс.</p>
+        <section class="gt-panel p-5 md:p-7 mb-6 overflow-hidden relative">
+            <div class="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div class="max-w-3xl">
+                    <span class="gt-chip inline-flex mb-4">Командный центр</span>
+                    <h1 class="text-3xl md:text-5xl font-bold leading-tight tracking-tight mb-3">Аркадный ангар<br class="hidden sm:block"> вашей библиотеки</h1>
+                    <p class="text-slate-300/90 text-sm md:text-base max-w-2xl">Перетаскивай карточки между статусами, следи за прогрессом и прокачивай профиль игровыми сессиями.</p>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto" id="statsDock">
+                    <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Всего игр</p><p id="statTotal" class="text-2xl font-bold">-</p></div>
+                    <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Играю</p><p id="statPlaying" class="text-2xl font-bold text-cyan-300">-</p></div>
+                    <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Пройдено</p><p id="statCompleted" class="text-2xl font-bold text-lime-300">-</p></div>
+                    <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Часов</p><p id="statHours" class="text-2xl font-bold text-amber-300">-</p></div>
+                </div>
             </div>
-            
-            <div class="flex gap-2 bg-gray-800 p-1 rounded-xl shadow-inner mt-4 md:mt-0">
-                <button class="status-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-blue-600/20 text-blue-400 active-tab" data-status="playing">Играю</button>
-                <button class="status-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-gray-700 text-gray-400" data-status="backlog">Запланировано</button>
-                <button class="status-tab px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-gray-700 text-gray-400" data-status="completed">Пройдено</button>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-4 mb-5">
+            <div class="gt-panel p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div class="relative flex-1">
+                    <input id="librarySearch" class="gt-input pr-9" type="text" placeholder="Быстрый поиск по библиотеке...">
+                    <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+                <select id="librarySort" class="gt-input w-full sm:w-[240px]">
+                    <option value="created-desc">Сначала новые</option>
+                    <option value="playtime-desc">По времени (убыв.)</option>
+                    <option value="playtime-asc">По времени (возр.)</option>
+                    <option value="title-asc">По названию (А-Я)</option>
+                    <option value="title-desc">По названию (Я-А)</option>
+                </select>
             </div>
-        </div>
-        <div id="gamesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 relative min-h-[400px] transition-all duration-300">
-            <div class="absolute inset-0 flex items-center justify-center">
-                 <div class="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+
+            <div class="gt-panel p-4 min-w-[260px]">
+                <p class="text-xs text-cyan-200/80 uppercase tracking-[0.15em] mb-2">Daily Quest</p>
+                <p id="dailyQuestText" class="text-sm text-slate-200">Синхронизация боевых задач...</p>
             </div>
-        </div>
+        </section>
+
+        <section class="mb-4 flex flex-wrap gap-2 bg-slate-900/40 border border-slate-600/30 p-1.5 rounded-2xl w-fit">
+            <button class="status-tab px-4 py-2 rounded-xl text-sm font-semibold bg-cyan-500/20 text-cyan-200 border border-cyan-400/30 active-tab" data-status="playing">Играю</button>
+            <button class="status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="backlog">Запланировано</button>
+            <button class="status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="completed">Пройдено</button>
+        </section>
+
+        <section id="gamesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 lg:gap-5 relative min-h-[420px]"></section>
     `;
 
-    const grid = document.getElementById('gamesGrid')!;
+    const grid = container.querySelector<HTMLElement>('#gamesGrid')!;
+    const searchInput = container.querySelector<HTMLInputElement>('#librarySearch')!;
+    const sortSelect = container.querySelector<HTMLSelectElement>('#librarySort')!;
+    const questTextEl = container.querySelector<HTMLElement>('#dailyQuestText')!;
 
     let dragMirror: HTMLElement | null = null;
+    let gamesByStatus: Game[] = [];
+    let currentStatus = 'playing';
+    let searchText = '';
+    let sortBy = 'created-desc';
+
     const transparentImage = new Image();
     transparentImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-    // Global dragover to prevent "forbidden" cursor and update mirror position
     const onGlobalDragOver = (e: DragEvent) => {
         e.preventDefault();
         if (e.dataTransfer) {
@@ -38,38 +106,157 @@ export async function renderLibrary(container: HTMLElement) {
             dragMirror.style.top = `${e.clientY}px`;
         }
     };
-    let currentStatus = 'playing';
 
     async function loadGames() {
         grid.innerHTML = `
-        <div class="col-span-full absolute inset-0 flex flex-col items-center justify-center opacity-50">
-            <div class="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4"></div>
-            <p class="text-gray-400 animate-pulse">Загрузка...</p>
-        </div>`;
-        
+            <div class="col-span-full absolute inset-0 flex flex-col items-center justify-center">
+                <div class="loader-spinner mb-3"></div>
+                <p class="text-slate-300/70 text-sm tracking-wide animate-pulse">Сканируем игровой ангар...</p>
+            </div>
+        `;
+
         try {
-            const games = await api.getGames(currentStatus);
-            renderGamesList(games);
-        } catch (e) {
-            grid.innerHTML = `<div class="col-span-full text-center py-10 text-red-400">Ошибка загрузки игр</div>`;
+            const [filteredGames, allGames] = await Promise.all([
+                api.getGames(currentStatus),
+                api.getGames()
+            ]);
+            gamesByStatus = filteredGames;
+            hydrateStats(allGames);
+            renderGamesList();
+        } catch {
+            grid.innerHTML = `<div class="col-span-full text-center py-12 text-rose-300">Ошибка загрузки игр</div>`;
         }
     }
 
-    container.querySelectorAll('.status-tab').forEach(btn => {
+    function hydrateStats(allGames: Game[]) {
+        const playing = allGames.filter((g) => g.status === 'playing').length;
+        const completed = allGames.filter((g) => g.status === 'completed').length;
+        const backlog = allGames.filter((g) => g.status === 'backlog').length;
+        const totalMinutes = allGames.reduce((sum, game) => sum + game.total_playtime_minutes, 0);
+        const totalHours = (totalMinutes / 60).toFixed(1);
+
+        (container.querySelector('#statTotal') as HTMLElement).textContent = String(allGames.length);
+        (container.querySelector('#statPlaying') as HTMLElement).textContent = String(playing);
+        (container.querySelector('#statCompleted') as HTMLElement).textContent = String(completed);
+        (container.querySelector('#statHours') as HTMLElement).textContent = totalHours;
+
+        questTextEl.textContent = getQuestText({
+            playing,
+            backlog,
+            completed,
+            totalMinutes
+        });
+    }
+
+    function getFilteredGames() {
+        const needle = searchText.trim().toLowerCase();
+        const filtered = needle
+            ? gamesByStatus.filter((game) => game.title.toLowerCase().includes(needle))
+            : [...gamesByStatus];
+
+        return filtered.sort((a, b) => compareGames(a, b, sortBy));
+    }
+
+    function renderGamesList() {
+        const games = getFilteredGames();
+        grid.innerHTML = '';
+
+        if (games.length === 0) {
+            const emptyMessage = searchText.trim()
+                ? 'Ничего не найдено по текущему фильтру.'
+                : 'Здесь пока пусто. Добавьте первую игру.';
+            grid.innerHTML = `
+                <div class="col-span-full gt-panel px-6 py-16 text-center">
+                    <p class="text-xl font-semibold mb-2 text-slate-100">${emptyMessage}</p>
+                    <p class="text-slate-400 text-sm mb-5">Создайте карточку игры и распределите ее по статусам.</p>
+                    <button onclick="document.getElementById('addGameBtn')?.click()" class="gt-btn gt-btn-primary">Добавить игру</button>
+                </div>
+            `;
+            return;
+        }
+
+        games.forEach((game, index) => {
+            const cover = game.cover_url || 'https://via.placeholder.com/300x400/111827/6b7280?text=No+Cover';
+            const playtimeHours = game.total_playtime_minutes / 60;
+            const progressPercent = Math.max(4, Math.min(100, Math.round((playtimeHours / 70) * 100)));
+
+            const card = document.createElement('a');
+            card.href = `#game/${game.id}`;
+            card.draggable = true;
+            card.className = 'group gt-panel overflow-hidden flex flex-col cursor-grab active:cursor-grabbing hover:-translate-y-1 transition-all duration-300';
+            card.style.animation = `panel-in 300ms ease-out ${Math.min(index * 35, 250)}ms both`;
+
+            card.addEventListener('dragstart', (evt) => {
+                const e = evt as DragEvent;
+                if (e.dataTransfer) {
+                    e.dataTransfer.setData('gameId', game.id.toString());
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setDragImage(transparentImage, 0, 0);
+                }
+
+                dragMirror = card.cloneNode(true) as HTMLElement;
+                dragMirror.classList.add('drag-mirror');
+                dragMirror.style.left = `${e.clientX}px`;
+                dragMirror.style.top = `${e.clientY}px`;
+                dragMirror.classList.remove('group', 'hover:-translate-y-1');
+                dragMirror.querySelectorAll('.flex-grow').forEach((el) => el.classList.remove('flex-grow'));
+                document.body.appendChild(dragMirror);
+
+                card.classList.add('dragging');
+                grid.classList.add('games-grid-dragging');
+                window.addEventListener('dragover', onGlobalDragOver);
+            });
+
+            card.addEventListener('dragend', () => {
+                card.classList.remove('dragging');
+                grid.classList.remove('games-grid-dragging');
+                if (dragMirror) {
+                    dragMirror.remove();
+                    dragMirror = null;
+                }
+                window.removeEventListener('dragover', onGlobalDragOver);
+                document.querySelectorAll('.status-tab').forEach((b) => b.classList.remove('drop-target'));
+            });
+
+            card.innerHTML = `
+                <div class="aspect-[3/4] relative overflow-hidden pointer-events-none">
+                    <img src="${cover}" alt="${game.title}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy">
+                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/30 to-transparent"></div>
+                    <div class="absolute top-2 left-2 gt-chip">${statusLabel(game.status)}</div>
+                    <div class="absolute bottom-0 left-0 right-0 p-3">
+                        <h3 class="font-bold text-white leading-tight line-clamp-2">${game.title}</h3>
+                    </div>
+                </div>
+                <div class="p-3 flex-grow flex flex-col gap-3 pointer-events-none">
+                    <div class="flex items-center justify-between text-xs text-slate-300/80">
+                        <span>Наиграно</span>
+                        <span class="font-semibold text-cyan-200">${formatPlaytime(game.total_playtime_minutes)}</span>
+                    </div>
+                    <div class="gt-progress-track">
+                        <div class="gt-progress-fill" style="width:${progressPercent}%"></div>
+                    </div>
+                    <p class="text-[11px] uppercase tracking-wider text-slate-400">Прогресс профиля: ${progressPercent}%</p>
+                </div>
+            `;
+
+            grid.appendChild(card);
+        });
+    }
+
+    container.querySelectorAll('.status-tab').forEach((btn) => {
         btn.addEventListener('click', (e) => {
             const target = e.currentTarget as HTMLElement;
-            document.querySelectorAll('.status-tab').forEach(b => {
-                b.classList.remove('bg-blue-600/20', 'text-blue-400', 'active-tab');
-                b.classList.add('hover:bg-gray-700', 'text-gray-400');
+            container.querySelectorAll('.status-tab').forEach((tab) => {
+                tab.classList.remove('bg-cyan-500/20', 'text-cyan-200', 'border-cyan-400/30', 'active-tab');
+                tab.classList.add('text-slate-300', 'hover:bg-slate-700/60', 'border-transparent');
             });
-            target.classList.remove('hover:bg-gray-700', 'text-gray-400');
-            target.classList.add('bg-blue-600/20', 'text-blue-400', 'active-tab');
+            target.classList.remove('text-slate-300', 'hover:bg-slate-700/60', 'border-transparent');
+            target.classList.add('bg-cyan-500/20', 'text-cyan-200', 'border-cyan-400/30', 'active-tab');
 
-            currentStatus = target.getAttribute('data-status') || '';
+            currentStatus = target.getAttribute('data-status') || 'playing';
             loadGames();
         });
 
-        // Drag and Drop: Drop Target
         btn.addEventListener('dragover', (e) => {
             e.preventDefault();
             const target = e.currentTarget as HTMLElement;
@@ -87,115 +274,30 @@ export async function renderLibrary(container: HTMLElement) {
             e.preventDefault();
             const target = e.currentTarget as HTMLElement;
             target.classList.remove('drop-target');
-            
+
             const gameId = e.dataTransfer?.getData('gameId');
             const newStatus = target.getAttribute('data-status');
 
             if (gameId && newStatus && newStatus !== currentStatus) {
                 try {
-                    await api.updateGame(parseInt(gameId), { status: newStatus });
-                    loadGames(); // Refresh the grid
-                } catch (error) {
-                    console.error('Failed to move game:', error);
+                    await api.updateGame(parseInt(gameId, 10), { status: newStatus });
+                    loadGames();
+                } catch {
                     alert('Не удалось переместить игру');
                 }
             }
         });
     });
 
-    function renderGamesList(games: Game[]) {
-        grid.innerHTML = '';
-        if (games.length === 0) {
-            grid.innerHTML = `
-                <div class="col-span-full flex flex-col items-center justify-center py-20 bg-gray-800/50 rounded-2xl border border-gray-700/50 border-dashed">
-                    <svg class="w-16 h-16 text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
-                    <p class="text-xl text-gray-400 font-medium mb-2">Здесь пока пусто</p>
-                    <p class="text-gray-500 mb-6 text-sm">Добавьте игры, чтобы начать отслеживание.</p>
-                    <button onclick="document.getElementById('addGameBtn')?.click()" class="bg-gray-700 hover:bg-gray-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-md">
-                        Добавить первую игру
-                    </button>
-                </div>
-            `;
-            return;
-        }
+    searchInput.addEventListener('input', () => {
+        searchText = searchInput.value;
+        renderGamesList();
+    });
 
-        games.forEach(game => {
-            const cover = game.cover_url || 'https://via.placeholder.com/300x400/1f2937/4b5563?text=Нет+обложки';
-            const card = document.createElement('a');
-            card.href = `#game/${game.id}`;
-            card.className = "group relative rounded-xl overflow-hidden bg-gray-800 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-300 ring-1 ring-gray-700 hover:ring-blue-500/50 flex flex-col h-full cursor-grab active:cursor-grabbing";
-            card.draggable = true;
-
-            card.addEventListener('dragstart', (evt) => {
-                const e = evt as DragEvent;
-                if (e.dataTransfer) {
-                    e.dataTransfer.setData('gameId', game.id.toString());
-                    e.dataTransfer.effectAllowed = 'move';
-                    // Hide default ghost
-                    e.dataTransfer.setDragImage(transparentImage, 0, 0);
-                }
-
-                // Create mirror
-                dragMirror = card.cloneNode(true) as HTMLElement;
-                dragMirror.classList.add('drag-mirror');
-                dragMirror.id = `mirror-${game.id}`;
-                dragMirror.style.left = `${e.clientX}px`;
-                dragMirror.style.top = `${e.clientY}px`;
-                
-                // Remove layout classes that cause stretching in fixed position
-                dragMirror.classList.remove('group', 'relative', 'hover:-translate-y-1', 'hover:shadow-xl', 'ring-1', 'hover:ring-blue-500/50', 'h-full', 'flex-col');
-                
-                // Ensure the inner elements don't try to grow
-                dragMirror.querySelectorAll('.flex-grow').forEach(el => el.classList.remove('flex-grow'));
-                
-                document.body.appendChild(dragMirror);
-
-                card.classList.add('dragging');
-                grid.classList.add('games-grid-dragging');
-                
-                // Add global listener to handle movement and cursor
-                window.addEventListener('dragover', onGlobalDragOver);
-            });
-
-            card.addEventListener('dragend', () => {
-                card.classList.remove('dragging');
-                grid.classList.remove('games-grid-dragging');
-                
-                // Remove mirror
-                if (dragMirror) {
-                    dragMirror.remove();
-                    dragMirror = null;
-                }
-
-                // Clean up global listener
-                window.removeEventListener('dragover', onGlobalDragOver);
-                document.querySelectorAll('.status-tab').forEach(b => b.classList.remove('drop-target'));
-            });
-            
-            card.innerHTML = `
-                <div class="aspect-[3/4] overflow-hidden bg-gray-900 relative pointer-events-none">
-                    <img src="${cover}" alt="${game.title}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy">
-                    <div class="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent opacity-80 group-hover:opacity-100 transition-opacity"></div>
-                    
-                    <!-- Drag Handle Icon (subtle) -->
-                    <div class="absolute top-2 right-2 p-1.5 bg-gray-900/60 backdrop-blur-md rounded-lg opacity-0 group-hover:opacity-100 transition-opacity border border-white/10">
-                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                    </div>
-
-                    <div class="absolute bottom-0 left-0 right-0 p-4 translate-y-2 group-hover:translate-y-0 transition-transform">
-                        <h3 class="font-bold text-white mb-1 line-clamp-2 leading-tight">${game.title}</h3>
-                    </div>
-                </div>
-                <div class="p-4 bg-gray-800/95 flex-grow backdrop-blur-sm border-t border-gray-700/50 pointer-events-none">
-                    <div class="flex items-center text-xs text-blue-400 font-medium bg-blue-500/10 px-2 py-1.5 rounded inline-flex self-start">
-                        <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        ${Math.floor(game.total_playtime_minutes / 60)} ч. ${game.total_playtime_minutes % 60} мин.
-                    </div>
-                </div>
-            `;
-            grid.appendChild(card);
-        });
-    }
+    sortSelect.addEventListener('change', () => {
+        sortBy = sortSelect.value;
+        renderGamesList();
+    });
 
     loadGames();
 }

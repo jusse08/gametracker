@@ -1,14 +1,241 @@
+@import url("https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700;800&family=Rajdhani:wght@500;600;700&display=swap");
 @import "tailwindcss";
 
-@theme {
-  --color-primary: #3b82f6; /* Tailwind blue-500 */
-  --color-dark-bg: #111827; /* Tailwind gray-900 */
-  --color-dark-surface: #1f2937; /* Tailwind gray-800 */
+:root {
+    --bg-void: #070910;
+    --bg-surface: #101728;
+    --bg-surface-soft: #152036;
+    --line-soft: rgba(154, 173, 210, 0.22);
+    --line-accent: rgba(20, 212, 255, 0.42);
+    --text-main: #e8f4ff;
+    --text-muted: #97abcc;
+    --accent-cyan: #14d4ff;
+    --accent-lime: #6fff8c;
+    --accent-amber: #ffbe5d;
+    --danger: #ff5d7b;
+    --card-glow: 0 0 0 1px rgba(147, 168, 207, 0.26), 0 14px 50px rgba(5, 10, 24, 0.65);
 }
 
-/* Drag and Drop Styles */
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    min-height: 100%;
+}
+
+body {
+    color: var(--text-main);
+    font-family: "Oxanium", "Segoe UI", sans-serif;
+    background: radial-gradient(circle at 10% 15%, rgba(20, 212, 255, 0.18), transparent 35%),
+        radial-gradient(circle at 88% 4%, rgba(111, 255, 140, 0.12), transparent 40%),
+        radial-gradient(circle at 45% 75%, rgba(56, 89, 193, 0.25), transparent 45%),
+        linear-gradient(180deg, #080a11 0%, #05070f 100%);
+    overflow-x: hidden;
+}
+
+body::before,
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+}
+
+body::before {
+    background-image: linear-gradient(rgba(102, 142, 220, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(102, 142, 220, 0.08) 1px, transparent 1px);
+    background-size: 42px 42px;
+    mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.85) 0%, transparent 75%);
+}
+
+body::after {
+    background: linear-gradient(120deg, transparent 0%, rgba(20, 212, 255, 0.1) 45%, transparent 60%);
+    animation: scan 9s linear infinite;
+    transform: translateX(-100%);
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.gt-nav {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    backdrop-filter: blur(14px);
+    background: linear-gradient(180deg, rgba(12, 18, 32, 0.88) 0%, rgba(9, 14, 26, 0.78) 100%);
+    border-bottom: 1px solid var(--line-soft);
+    box-shadow: 0 12px 28px rgba(3, 8, 20, 0.5);
+}
+
+.gt-nav-inner {
+    width: min(1360px, 100% - 1.5rem);
+    margin: 0 auto;
+    padding: 0.95rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.gt-brand {
+    color: var(--text-main);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    text-decoration: none;
+    letter-spacing: 0.03em;
+    font-family: "Rajdhani", sans-serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.gt-brand-mark {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    color: var(--accent-cyan);
+    background: linear-gradient(145deg, rgba(20, 212, 255, 0.2), rgba(20, 212, 255, 0.04));
+    border: 1px solid rgba(20, 212, 255, 0.35);
+    box-shadow: inset 0 0 18px rgba(20, 212, 255, 0.2);
+}
+
+.gt-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.gt-user {
+    border: 1px solid var(--line-soft);
+    background: rgba(22, 31, 54, 0.58);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: 0.42rem 0.85rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.gt-btn,
+.gt-link {
+    border: 1px solid var(--line-soft);
+    background: linear-gradient(180deg, rgba(22, 31, 54, 0.92), rgba(14, 22, 38, 0.92));
+    color: var(--text-main);
+    border-radius: 12px;
+    padding: 0.62rem 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    text-decoration: none;
+    font-family: "Rajdhani", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: 0.2s ease;
+}
+
+.gt-btn:hover,
+.gt-link:hover {
+    border-color: var(--line-accent);
+    box-shadow: 0 0 0 1px rgba(20, 212, 255, 0.15), 0 8px 22px rgba(1, 12, 34, 0.75);
+    transform: translateY(-1px);
+}
+
+.gt-btn-primary {
+    border-color: rgba(20, 212, 255, 0.58);
+    background: linear-gradient(145deg, rgba(14, 184, 229, 0.32), rgba(11, 84, 171, 0.35));
+}
+
+.gt-btn-admin {
+    border-color: rgba(255, 190, 93, 0.55);
+    background: linear-gradient(145deg, rgba(255, 190, 93, 0.2), rgba(192, 93, 6, 0.16));
+}
+
+.gt-main {
+    width: min(1360px, 100% - 1.5rem);
+    margin: 0 auto;
+    padding: 1.4rem 0 2.5rem;
+    animation: panel-in 420ms ease-out both;
+}
+
+.gt-panel {
+    position: relative;
+    background: linear-gradient(180deg, rgba(19, 28, 49, 0.88), rgba(15, 21, 37, 0.92));
+    border: 1px solid var(--line-soft);
+    border-radius: 18px;
+    box-shadow: var(--card-glow);
+}
+
+.gt-panel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(115deg, rgba(20, 212, 255, 0.14), transparent 28%, transparent 72%, rgba(111, 255, 140, 0.08));
+    opacity: 0.5;
+}
+
+.gt-chip {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #b8dcff;
+    border: 1px solid rgba(20, 212, 255, 0.34);
+    background: rgba(20, 212, 255, 0.12);
+    border-radius: 999px;
+    padding: 0.34rem 0.65rem;
+}
+
+.gt-input {
+    width: 100%;
+    border: 1px solid rgba(120, 141, 180, 0.4);
+    border-radius: 12px;
+    background: rgba(5, 10, 20, 0.62);
+    color: var(--text-main);
+    padding: 0.75rem 0.95rem;
+    outline: none;
+    transition: 0.2s ease;
+}
+
+.gt-input::placeholder {
+    color: rgba(149, 166, 196, 0.8);
+}
+
+.gt-input:focus {
+    border-color: rgba(20, 212, 255, 0.8);
+    box-shadow: 0 0 0 3px rgba(20, 212, 255, 0.14);
+}
+
+.gt-progress-track {
+    border-radius: 999px;
+    background: rgba(2, 8, 18, 0.8);
+    border: 1px solid rgba(103, 122, 161, 0.35);
+    height: 10px;
+    overflow: hidden;
+}
+
+.gt-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #12cff6, #6fff8c);
+    box-shadow: 0 0 24px rgba(20, 212, 255, 0.55);
+}
+
+/* Drag and Drop */
 .dragging {
-    opacity: 0.1; /* Almost invisible, the mirror does the work */
+    opacity: 0.08;
     filter: grayscale(1) blur(2px);
     transition: all 0.3s ease;
 }
@@ -17,57 +244,42 @@
     position: fixed;
     pointer-events: none;
     z-index: 9999;
-    width: 180px;
-    height: auto; /* Ensure it doesn't stretch to viewport height */
+    width: 200px;
+    height: auto;
     display: flex;
     flex-direction: column;
     transform-origin: center center;
-    transform: translate(-50%, -50%) scale(1.05) rotate(2deg);
-    box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.5), 0 18px 36px -18px rgba(0, 0, 0, 0.5);
-    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1.04) rotate(2deg);
+    box-shadow: 0 30px 64px rgba(0, 0, 0, 0.58);
+    opacity: 0.96;
     transition: transform 0.1s ease-out;
     will-change: transform, left, top;
-    border-radius: 12px;
+    border-radius: 14px;
     overflow: hidden;
-    background: #1f2937; /* Ensure background is solid */
+    background: #16213a;
 }
 
-/* Ensure the bottom part of the mirror doesn't grow infinitely */
 .drag-mirror .flex-grow {
     flex-grow: 0 !important;
 }
 
 .drop-target {
-    background-color: rgba(59, 130, 246, 0.3) !important;
-    border-color: #3b82f6 !important;
-    color: #3b82f6 !important;
-    transform: scale(1.1) translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
-    z-index: 10;
+    border-color: rgba(20, 212, 255, 0.72) !important;
+    color: #b3f6ff !important;
+    background: rgba(20, 212, 255, 0.22) !important;
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 0 10px 26px rgba(20, 212, 255, 0.3);
 }
 
 .status-tab {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .games-grid-dragging {
     cursor: grabbing !important;
 }
 
-body {
-    background-color: var(--color-dark-bg);
-    color: white;
-    font-family: system-ui, -apple-system, sans-serif;
-    margin: 0;
-}
-
-#app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
-/* Notification Styles */
+/* Notification */
 .notification-container {
     position: fixed;
     top: 20px;
@@ -84,65 +296,43 @@ body {
     align-items: center;
     gap: 12px;
     padding: 14px 16px;
-    background: #1f2937;
+    background: linear-gradient(180deg, rgba(23, 32, 58, 0.97), rgba(12, 19, 34, 0.96));
     border-radius: 12px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 12px 34px rgba(2, 10, 24, 0.68);
     border: 1px solid;
     min-width: 300px;
     max-width: 500px;
     pointer-events: auto;
-    animation: notificationSlideIn 0.3s ease-out;
+    animation: notification-slide-in 0.3s ease-out;
     transition: all 0.3s ease;
 }
 
 .notification-hide {
-    animation: notificationSlideOut 0.3s ease-out forwards;
-}
-
-@keyframes notificationSlideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes notificationSlideOut {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    to {
-        transform: translateX(100%);
-        opacity: 0;
-    }
+    animation: notification-slide-out 0.3s ease-out forwards;
 }
 
 .notification-success {
-    border-color: #10b981;
+    border-color: rgba(111, 255, 140, 0.72);
 }
 
 .notification-success .notification-icon {
-    color: #10b981;
+    color: var(--accent-lime);
 }
 
 .notification-error {
-    border-color: #ef4444;
+    border-color: rgba(255, 93, 123, 0.72);
 }
 
 .notification-error .notification-icon {
-    color: #ef4444;
+    color: var(--danger);
 }
 
 .notification-info {
-    border-color: #3b82f6;
+    border-color: rgba(20, 212, 255, 0.72);
 }
 
 .notification-info .notification-icon {
-    color: #3b82f6;
+    color: var(--accent-cyan);
 }
 
 .notification-icon {
@@ -158,7 +348,7 @@ body {
 .notification-close {
     background: transparent;
     border: none;
-    color: #6b7280;
+    color: rgba(153, 171, 204, 0.9);
     cursor: pointer;
     padding: 4px;
     display: flex;
@@ -169,19 +359,16 @@ body {
 }
 
 .notification-close:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.12);
     color: white;
 }
 
-/* Global Loader */
+/* Loader */
 .global-loader {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
+    inset: 0;
+    background: rgba(3, 8, 18, 0.74);
+    backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -197,16 +384,92 @@ body {
 }
 
 .loader-spinner {
-    width: 50px;
-    height: 50px;
-    border: 4px solid rgba(59, 130, 246, 0.3);
-    border-top-color: #3b82f6;
+    width: 54px;
+    height: 54px;
+    border: 4px solid rgba(20, 212, 255, 0.26);
+    border-top-color: var(--accent-cyan);
+    border-right-color: var(--accent-lime);
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: spin 0.75s linear infinite;
 }
 
 @keyframes spin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+@keyframes panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes notification-slide-in {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes notification-slide-out {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+@keyframes scan {
+    to {
+        transform: translateX(130%);
+    }
+}
+
+@media (max-width: 1024px) {
+    .gt-nav-inner {
+        width: min(1360px, 100% - 1rem);
+        padding: 0.7rem 0;
+    }
+
+    .gt-main {
+        width: min(1360px, 100% - 1rem);
+        padding-top: 1rem;
+    }
+
+    .gt-brand {
+        font-size: 1.45rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .gt-toolbar {
+        gap: 0.45rem;
+    }
+
+    .gt-btn,
+    .gt-link {
+        padding: 0.52rem 0.74rem;
+        font-size: 0.85rem;
+    }
+
+    .notification {
+        min-width: 0;
+        width: calc(100vw - 2rem);
     }
 }
