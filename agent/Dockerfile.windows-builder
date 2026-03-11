@@ -1,0 +1,9 @@
+FROM cdrx/pyinstaller-windows:python3
+
+WORKDIR /src
+
+COPY agent /src/agent
+COPY agent/build_agent_in_docker.sh /usr/local/bin/build_agent
+RUN chmod +x /usr/local/bin/build_agent
+
+ENTRYPOINT ["/usr/local/bin/build_agent"]

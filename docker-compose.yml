@@ -1,4 +1,15 @@
 services:
+  agent-builder:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile.windows-builder
+    container_name: gametracker-agent-builder
+    restart: "no"
+    volumes:
+      - ./gametracker_data:/out
+    networks:
+      - gametracker-network
+
   backend:
     build:
       context: ./backend
@@ -12,6 +23,9 @@ services:
     environment:
       DATABASE_URL: sqlite:///./data/database.db
       ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
+    depends_on:
+      agent-builder:
+        condition: service_completed_successfully
     networks:
       - gametracker-network
     ports:

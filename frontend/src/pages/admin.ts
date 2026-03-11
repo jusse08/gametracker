@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { showNotification } from '../main';
+import { showNotification } from '../ui';
 
 export async function mountAdminModal() {
     const root = document.getElementById('modal-root')!;
@@ -25,7 +25,7 @@ export async function mountAdminModal() {
             <!-- Create User Form -->
             <div class="gt-panel rounded-xl p-5">
                 <h3 class="text-sm font-bold text-slate-300/80 uppercase tracking-widest mb-4">Создать пользователя</h3>
-                <form id="createUserForm" class="flex gap-4 items-end">
+                <form id="createUserForm" class="flex gap-4 items-end" novalidate>
                     <div class="flex-1">
                         <label class="block text-xs text-slate-400 mb-1">Имя пользователя</label>
                         <input type="text" id="newUsername" class="gt-input" required>
@@ -122,6 +122,23 @@ export async function mountAdminModal() {
         e.preventDefault();
         const usernameInput = document.getElementById('newUsername') as HTMLInputElement;
         const passwordInput = document.getElementById('newPassword') as HTMLInputElement;
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+        if (!username) {
+            showNotification('Введите имя пользователя.', 'info');
+            usernameInput.focus();
+            return;
+        }
+        if (!password.trim()) {
+            showNotification('Введите пароль.', 'info');
+            passwordInput.focus();
+            return;
+        }
+        if (password.length < 6) {
+            showNotification('Пароль должен быть не короче 6 символов.', 'error');
+            passwordInput.focus();
+            return;
+        }
         const btn = (e.currentTarget as HTMLFormElement).querySelector('button')!;
         
         const originalText = btn.textContent;
@@ -129,7 +146,7 @@ export async function mountAdminModal() {
         btn.disabled = true;
 
         try {
-            await api.adminCreateUser(usernameInput.value, passwordInput.value);
+            await api.adminCreateUser(username, password);
             showNotification('Пользователь успешно создан', 'success');
             usernameInput.value = '';
             passwordInput.value = '';

@@ -1,4 +1,5 @@
 import { api } from '../api';
+import { showNotification } from '../ui';
 
 export function mountAddGameModal() {
     const root = document.getElementById('modal-root')!;
@@ -23,7 +24,7 @@ export function mountAddGameModal() {
         </div>
         
         <div class="p-6 border-b border-slate-600/45 bg-slate-900/35">
-            <form id="searchForm" class="flex gap-3">
+            <form id="searchForm" class="flex gap-3" novalidate>
                 <div class="relative flex-grow group">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-cyan-300 transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
@@ -72,8 +73,25 @@ export function mountAddGameModal() {
 
     document.getElementById('searchForm')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const query = (document.getElementById('dbQuery') as HTMLInputElement).value;
+        const queryInput = document.getElementById('dbQuery') as HTMLInputElement;
+        const query = queryInput.value.trim();
+        if (!query) {
+            showNotification('Введите название игры для поиска.', 'info');
+            queryInput.focus();
+            return;
+        }
         const resultsBox = document.getElementById('searchResults')!;
+        const alreadyAddedClass = "bg-rose-500/15 text-rose-300 border border-rose-400/45 text-sm font-medium px-4 py-2 rounded-lg transition-all cursor-default opacity-90";
+        const alreadyAddedIcon = '<svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke-width="2"></circle><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7.5 16.5L16.5 7.5"></path></svg>';
+
+        const markButtonsAsAlreadyAdded = (buttons: NodeListOf<Element>) => {
+            buttons.forEach(button => {
+                const el = button as HTMLButtonElement;
+                el.disabled = true;
+                el.className = alreadyAddedClass;
+                el.innerHTML = alreadyAddedIcon;
+            });
+        };
         
         // Show loading state
         resultsBox.innerHTML = `
@@ -84,10 +102,22 @@ export function mountAddGameModal() {
         `;
 
         try {
-            // Search Steam API
-            const steam = await api.searchSteam(query);
+            const [steam, existingGames] = await Promise.all([
+                api.searchSteam(query),
+                api.getGames()
+            ]);
 
             const results = steam;
+            const existingSteamIds = new Set(
+                existingGames
+                    .map(g => g.steam_app_id)
+                    .filter((id): id is number => typeof id === 'number')
+            );
+            const existingTitles = new Set(
+                existingGames
+                    .map(g => (g.title || '').trim().toLowerCase())
+                    .filter(Boolean)
+            );
 
             resultsBox.innerHTML = '';
             
@@ -97,6 +127,21 @@ export function mountAddGameModal() {
             }
 
             results.forEach((game, idx) => {
+                const normalizedTitle = (game.title || '').trim().toLowerCase();
+                const isAlreadyAdded =
+                    (typeof game.steam_app_id === 'number' && existingSteamIds.has(game.steam_app_id)) ||
+                    (!!normalizedTitle && existingTitles.has(normalizedTitle));
+
+                const steamBtnClass = isAlreadyAdded
+                    ? alreadyAddedClass
+                    : "add-btn bg-cyan-400/20 hover:bg-cyan-400/30 text-cyan-200 border border-cyan-300/40 text-sm font-medium px-4 py-2 rounded-lg transition-all";
+                const nonSteamBtnClass = isAlreadyAdded
+                    ? alreadyAddedClass
+                    : "add-btn bg-lime-400/20 hover:bg-lime-400/30 text-lime-200 border border-lime-300/40 text-sm font-medium px-4 py-2 rounded-lg transition-all";
+                const steamBtnContent = isAlreadyAdded ? alreadyAddedIcon : "Steam";
+                const nonSteamBtnContent = isAlreadyAdded ? alreadyAddedIcon : "Non-Steam";
+                const disabledAttr = isAlreadyAdded ? "disabled" : "";
+
                 const el = document.createElement('div');
                 el.className = "group flex items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-slate-600/45 hover:border-cyan-400/55 transition-colors";
 
@@ -116,11 +161,11 @@ export function mountAddGameModal() {
                         </div>
                     </div>
                     <div class="flex gap-2 shrink-0">
-                        <button class="add-btn bg-cyan-400/20 hover:bg-cyan-400/30 text-cyan-200 border border-cyan-300/40 text-sm font-medium px-4 py-2 rounded-lg transition-all" data-idx="${idx}" data-sync-type="steam">
-                            Steam
+                        <button class="${steamBtnClass}" data-idx="${idx}" data-sync-type="steam" ${disabledAttr}>
+                            ${steamBtnContent}
                         </button>
-                        <button class="add-btn bg-lime-400/20 hover:bg-lime-400/30 text-lime-200 border border-lime-300/40 text-sm font-medium px-4 py-2 rounded-lg transition-all" data-idx="${idx}" data-sync-type="agent">
-                            Агент
+                        <button class="${nonSteamBtnClass}" data-idx="${idx}" data-sync-type="non_steam" ${disabledAttr}>
+                            ${nonSteamBtnContent}
                         </button>
                     </div>
                 `;
@@ -131,8 +176,9 @@ export function mountAddGameModal() {
             resultsBox.querySelectorAll('.add-btn').forEach(btn => {
                 btn.addEventListener('click', async (btnEv) => {
                     const target = btnEv.currentTarget as HTMLButtonElement;
+                    if (target.disabled) return;
                     const idx = parseInt(target.getAttribute('data-idx')!);
-                    const syncType = target.getAttribute('data-sync-type') as 'steam' | 'agent';
+                    const syncType = target.getAttribute('data-sync-type') as 'steam' | 'non_steam';
                     const targetGame = results[idx];
                     const siblingButtons = resultsBox.querySelectorAll(`.add-btn[data-idx="${idx}"]`);
 
@@ -150,23 +196,18 @@ export function mountAddGameModal() {
                             status: 'backlog'
                         });
 
-                        siblingButtons.forEach(button => {
-                            const el = button as HTMLButtonElement;
-                            el.disabled = true;
-                            el.className = "bg-green-500/20 text-green-400 border border-green-500/50 text-sm font-medium px-4 py-2 rounded-lg transition-all cursor-default";
-                            el.innerHTML = '<svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
-                        });
+                        markButtonsAsAlreadyAdded(siblingButtons);
 
                         // Refetch library if shown
                         if (window.location.hash === '' || window.location.hash === '#library') {
                             window.dispatchEvent(new Event('hashchange'));
                         }
                     } catch(e) {
-                         alert('Ошибка добавления');
+                         showNotification('Ошибка добавления', 'error');
                          siblingButtons.forEach(button => {
                             const el = button as HTMLButtonElement;
                             el.disabled = false;
-                            el.textContent = el.getAttribute('data-sync-type') === 'steam' ? 'Steam' : 'Агент';
+                            el.textContent = el.getAttribute('data-sync-type') === 'steam' ? 'Steam' : 'Non-Steam';
                          });
                     }
                 });

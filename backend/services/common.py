@@ -89,9 +89,19 @@ def build_game_read(session: Session, game: Game) -> GameRead:
 
 
 def validate_sync_type(sync_type: str) -> str:
-    if sync_type not in {"steam", "agent"}:
-        raise HTTPException(status_code=400, detail="sync_type must be 'steam' or 'agent'")
+    if sync_type not in {"steam", "non_steam"}:
+        raise HTTPException(status_code=400, detail="sync_type must be 'steam' or 'non_steam'")
     return sync_type
+
+
+def validate_game_status(status: str) -> str:
+    allowed = {"playing", "backlog", "completed", "deferred", "wishlist"}
+    if status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="status must be one of: playing, backlog, completed, deferred, wishlist",
+        )
+    return status
 
 
 def upsert_agent_session(

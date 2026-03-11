@@ -1,12 +1,14 @@
 from typing import Optional, List
 from datetime import datetime
 from sqlmodel import Field, SQLModel, Relationship
+import sqlalchemy as sa
 
 class UserBase(SQLModel):
     username: str = Field(..., min_length=3, max_length=50, unique=True)
     steam_api_key: Optional[str] = None
     steam_profile_url: Optional[str] = None
     steam_user_id: Optional[str] = None
+    agent_token: Optional[str] = Field(default=None, index=True, unique=True)
 
 class User(UserBase, table=True):
     __tablename__ = "users"
@@ -28,12 +30,18 @@ class UserRead(SQLModel):
 
 class GameBase(SQLModel):
     title: str = Field(..., min_length=1, max_length=200)
-    status: str = Field(default="backlog", description="playing | backlog | completed | wishlist")
+    status: str = Field(default="backlog", description="playing | backlog | completed | deferred | wishlist")
     cover_url: Optional[str] = None
     description: Optional[str] = None
-    sync_type: str = Field(default="steam", description="steam | agent")
+    sync_type: str = Field(default="steam", description="steam | non_steam")
     steam_app_id: Optional[int] = None
     exe_name: Optional[str] = None
+    launch_path: Optional[str] = None
+    personal_rating: Optional[int] = Field(default=None, ge=1, le=5)
+    genres: List[str] = Field(
+        default_factory=list,
+        sa_column=sa.Column(sa.JSON(), nullable=False, server_default="[]"),
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Game(GameBase, table=True):
@@ -47,6 +55,7 @@ class Game(GameBase, table=True):
     checklist_items: List["ChecklistItem"] = Relationship(back_populates="game", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     notes: List["Note"] = Relationship(back_populates="game", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     agent_config: Optional["AgentConfig"] = Relationship(back_populates="game", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    quest_categories: List["QuestCategory"] = Relationship(back_populates="game", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
 class GameCreate(GameBase):
     pass
@@ -112,6 +121,26 @@ class ChecklistItemCreate(SQLModel):
 class ChecklistItemRead(ChecklistItemBase):
     id: int
 
+class QuestCategoryBase(SQLModel):
+    game_id: int = Field(foreign_key="games.id")
+    name: str = Field(min_length=1, max_length=100)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class QuestCategory(QuestCategoryBase, table=True):
+    __tablename__ = "quest_categories"
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    game: Game = Relationship(back_populates="quest_categories")
+
+class QuestCategoryRead(QuestCategoryBase):
+    id: int
+
+class QuestCategoryCreate(SQLModel):
+    name: str = Field(min_length=1, max_length=100)
+
+class QuestCategoryRename(SQLModel):
+    new_name: str = Field(min_length=1, max_length=100)
+
 class NoteBase(SQLModel):
     game_id: int = Field(foreign_key="games.id")
     text: str
@@ -134,8 +163,15 @@ class NoteRead(NoteBase):
 class AgentConfigBase(SQLModel):
     game_id: int = Field(foreign_key="games.id")
     exe_name: str
+    launch_path: Optional[str] = None
     enabled: bool = Field(default=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    pending_launch_id: Optional[str] = None
+    pending_launch_path: Optional[str] = None
+    pending_launch_requested_at: Optional[datetime] = None
+    last_launch_status: Optional[str] = None
+    last_launch_error: Optional[str] = None
+    last_launch_at: Optional[datetime] = None
 
 class AgentConfig(AgentConfigBase, table=True):
     __tablename__ = "agent_config"
@@ -144,13 +180,14 @@ class AgentConfig(AgentConfigBase, table=True):
     game: Game = Relationship(back_populates="agent_config")
 
 class AgentConfigCreate(SQLModel):
-    exe_name: str
+    launch_path: str
     enabled: bool = True
 
 class AgentConfigRead(SQLModel):
     id: int
     game_id: int
     exe_name: str
+    launch_path: Optional[str]
     enabled: bool
     updated_at: datetime
 
@@ -186,3 +223,6 @@ class GameUpdate(SQLModel):
     description: Optional[str] = None
     sync_type: Optional[str] = None
     exe_name: Optional[str] = None
+    launch_path: Optional[str] = None
+    personal_rating: Optional[int] = Field(default=None, ge=1, le=5)
+    genres: Optional[List[str]] = None

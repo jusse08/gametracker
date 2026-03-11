@@ -1,4 +1,5 @@
 import { api, type Game } from '../api';
+import { showNotification } from '../ui';
 
 function formatPlaytime(minutes: number): string {
     const h = Math.floor(minutes / 60);
@@ -10,6 +11,7 @@ function statusLabel(status: string): string {
     if (status === 'playing') return 'Играю';
     if (status === 'completed') return 'Пройдено';
     if (status === 'backlog') return 'Запланировано';
+    if (status === 'deferred') return 'Отложено';
     return status;
 }
 
@@ -44,12 +46,13 @@ export async function renderLibrary(container: HTMLElement) {
                 <p class="library-status-title">Раздел библиотеки</p>
                 <p class="library-status-subtitle">Переключение активного статуса</p>
             </div>
-            <div class="library-status-tabs">
-                <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold bg-cyan-500/20 text-cyan-200 border border-cyan-400/30 active-tab" data-status="playing">Играю</button>
-                <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="backlog">Запланировано</button>
-                <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="completed">Пройдено</button>
-            </div>
-        </section>
+                <div class="library-status-tabs">
+                    <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold bg-cyan-500/20 text-cyan-200 border border-cyan-400/30 active-tab" data-status="playing">Играю</button>
+                    <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="backlog">Запланировано</button>
+                    <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="completed">Пройдено</button>
+                    <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="deferred">Отложено</button>
+                </div>
+            </section>
 
         <section class="mb-5">
             <div class="gt-panel p-4 library-filters">
@@ -57,13 +60,22 @@ export async function renderLibrary(container: HTMLElement) {
                     <input id="librarySearch" class="gt-input pr-9" type="text" placeholder="Быстрый поиск по библиотеке...">
                     <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
-                <select id="librarySort" class="gt-input library-sort">
-                    <option value="created-desc">Сначала новые</option>
-                    <option value="playtime-desc">По времени (убыв.)</option>
-                    <option value="playtime-asc">По времени (возр.)</option>
-                    <option value="title-asc">По названию (А-Я)</option>
-                    <option value="title-desc">По названию (Я-А)</option>
+                <select id="libraryGenreFilter" class="gt-input text-sm">
+                    <option value="">Все жанры</option>
                 </select>
+                <div id="librarySortWrap" class="library-sort-wrap">
+                    <button id="librarySortBtn" class="library-sort-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="librarySortLabel">Сначала новые</span>
+                        <svg class="library-sort-caret w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="librarySortMenu" class="library-sort-menu" role="listbox" aria-label="Сортировка библиотеки">
+                        <button class="library-sort-option is-active" type="button" role="option" aria-selected="true" data-value="created-desc">Сначала новые</button>
+                        <button class="library-sort-option" type="button" role="option" aria-selected="false" data-value="playtime-desc">По времени (убыв.)</button>
+                        <button class="library-sort-option" type="button" role="option" aria-selected="false" data-value="playtime-asc">По времени (возр.)</button>
+                        <button class="library-sort-option" type="button" role="option" aria-selected="false" data-value="title-asc">По названию (А-Я)</button>
+                        <button class="library-sort-option" type="button" role="option" aria-selected="false" data-value="title-desc">По названию (Я-А)</button>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -72,13 +84,27 @@ export async function renderLibrary(container: HTMLElement) {
 
     const grid = container.querySelector<HTMLElement>('#gamesGrid')!;
     const searchInput = container.querySelector<HTMLInputElement>('#librarySearch')!;
-    const sortSelect = container.querySelector<HTMLSelectElement>('#librarySort')!;
+    const sortWrap = container.querySelector<HTMLElement>('#librarySortWrap')!;
+    const sortButton = container.querySelector<HTMLButtonElement>('#librarySortBtn')!;
+    const sortLabel = container.querySelector<HTMLElement>('#librarySortLabel')!;
+    const sortOptions = Array.from(container.querySelectorAll<HTMLButtonElement>('.library-sort-option'));
 
     let dragMirror: HTMLElement | null = null;
     let gamesByStatus: Game[] = [];
+    let allGames: Game[] = [];
+    const profileProgressByGameId = new Map<number, number>();
     let currentStatus = 'playing';
     let searchText = '';
+    let selectedGenre = '';
     let sortBy = 'created-desc';
+    const listenersAbort = new AbortController();
+    const sortLabels: Record<string, string> = {
+        'created-desc': 'Сначала новые',
+        'playtime-desc': 'По времени (убыв.)',
+        'playtime-asc': 'По времени (возр.)',
+        'title-asc': 'По названию (А-Я)',
+        'title-desc': 'По названию (Я-А)'
+    };
 
     const transparentImage = new Image();
     transparentImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -103,12 +129,11 @@ export async function renderLibrary(container: HTMLElement) {
         `;
 
         try {
-            const [filteredGames, allGames] = await Promise.all([
-                api.getGames(currentStatus),
-                api.getGames()
-            ]);
-            gamesByStatus = filteredGames;
+            allGames = await api.getGames();
+            gamesByStatus = allGames.filter((g) => g.status === currentStatus);
+            await hydrateProfileProgress(gamesByStatus);
             hydrateStats(allGames);
+            hydrateGenres(allGames);
             renderGamesList();
         } catch {
             grid.innerHTML = `<div class="col-span-full text-center py-12 text-rose-300">Ошибка загрузки игр</div>`;
@@ -129,11 +154,87 @@ export async function renderLibrary(container: HTMLElement) {
 
     function getFilteredGames() {
         const needle = searchText.trim().toLowerCase();
-        const filtered = needle
-            ? gamesByStatus.filter((game) => game.title.toLowerCase().includes(needle))
+        const byGenre = selectedGenre
+            ? gamesByStatus.filter((game) => (game.genres || []).includes(selectedGenre))
             : [...gamesByStatus];
+        const filtered = needle
+            ? byGenre.filter((game) => game.title.toLowerCase().includes(needle))
+            : byGenre;
 
         return filtered.sort((a, b) => compareGames(a, b, sortBy));
+    }
+
+    function hydrateGenres(games: Game[]) {
+        const genreSelect = container.querySelector<HTMLSelectElement>('#libraryGenreFilter');
+        if (!genreSelect) return;
+        const genres = new Set<string>();
+        games.forEach((game) => {
+            (game.genres || []).forEach((genre) => {
+                if (genre) genres.add(genre);
+            });
+        });
+        const sortedGenres = Array.from(genres).sort((a, b) => a.localeCompare(b, 'ru'));
+        genreSelect.innerHTML = '<option value="">Все жанры</option>';
+        sortedGenres.forEach((genre) => {
+            const option = document.createElement('option');
+            option.value = genre;
+            option.textContent = genre;
+            if (genre === selectedGenre) {
+                option.selected = true;
+            }
+            genreSelect.appendChild(option);
+        });
+        if (selectedGenre && !sortedGenres.includes(selectedGenre)) {
+            selectedGenre = '';
+            genreSelect.value = '';
+        }
+    }
+
+    function calcProgressPercent(completed: number, total: number): number {
+        if (total <= 0) return 0;
+        return Math.round((completed / total) * 100);
+    }
+
+    async function computeProfileProgress(game: Game): Promise<number> {
+        try {
+            if (game.sync_type === 'steam') {
+                const [checklists, achievements] = await Promise.all([
+                    api.getChecklist(game.id),
+                    api.getAchievements(game.id)
+                ]);
+
+                const questPercent = calcProgressPercent(
+                    checklists.filter((c) => c.completed).length,
+                    checklists.length
+                );
+                const achPercent = calcProgressPercent(
+                    achievements.filter((a) => a.completed).length,
+                    achievements.length
+                );
+
+                if (checklists.length === 0 && achievements.length === 0) return 0;
+                if (checklists.length === 0) return achPercent;
+                if (achievements.length === 0) return questPercent;
+                return Math.round((questPercent + achPercent) / 2);
+            }
+
+            const checklists = await api.getChecklist(game.id);
+            return calcProgressPercent(
+                checklists.filter((c) => c.completed).length,
+                checklists.length
+            );
+        } catch {
+            return 0;
+        }
+    }
+
+    async function hydrateProfileProgress(games: Game[]) {
+        await Promise.all(
+            games.map(async (game) => {
+                const progress = await computeProfileProgress(game);
+                profileProgressByGameId.set(game.id, progress);
+            })
+        );
     }
 
     function renderGamesList() {
@@ -156,8 +257,7 @@ export async function renderLibrary(container: HTMLElement) {
 
         games.forEach((game, index) => {
             const cover = game.cover_url || 'https://via.placeholder.com/300x400/111827/6b7280?text=No+Cover';
-            const playtimeHours = game.total_playtime_minutes / 60;
-            const progressPercent = Math.max(4, Math.min(100, Math.round((playtimeHours / 70) * 100)));
+            const progressPercent = profileProgressByGameId.get(game.id) ?? 0;
 
             const card = document.createElement('a');
             card.href = `#game/${game.id}`;
@@ -215,6 +315,7 @@ export async function renderLibrary(container: HTMLElement) {
                         <div class="gt-progress-fill" style="width:${progressPercent}%"></div>
                     </div>
                     <p class="text-[11px] uppercase tracking-wider text-slate-400">Прогресс профиля: ${progressPercent}%</p>
+                    <p class="text-[11px] text-slate-400 line-clamp-2">${(game.genres || []).slice(0, 2).join(' • ') || 'Жанры не заданы'}</p>
                 </div>
             `;
 
@@ -262,7 +363,7 @@ export async function renderLibrary(container: HTMLElement) {
                     await api.updateGame(parseInt(gameId, 10), { status: newStatus });
                     loadGames();
                 } catch {
-                    alert('Не удалось переместить игру');
+                    showNotification('Не удалось переместить игру', 'error');
                 }
             }
         });
@@ -271,12 +372,65 @@ export async function renderLibrary(container: HTMLElement) {
     searchInput.addEventListener('input', () => {
         searchText = searchInput.value;
         renderGamesList();
-    });
+    }, { signal: listenersAbort.signal });
 
-    sortSelect.addEventListener('change', () => {
-        sortBy = sortSelect.value;
+    container.querySelector<HTMLSelectElement>('#libraryGenreFilter')?.addEventListener('change', (e) => {
+        selectedGenre = (e.target as HTMLSelectElement).value;
         renderGamesList();
+    }, { signal: listenersAbort.signal });
+
+    const closeSortMenu = () => {
+        sortWrap.classList.remove('is-open');
+        sortButton.setAttribute('aria-expanded', 'false');
+    };
+
+    const openSortMenu = () => {
+        sortWrap.classList.add('is-open');
+        sortButton.setAttribute('aria-expanded', 'true');
+    };
+
+    const setSortValue = (value: string) => {
+        sortBy = value;
+        sortLabel.textContent = sortLabels[value] || 'Сортировка';
+        sortOptions.forEach((option) => {
+            const isActive = option.dataset.value === value;
+            option.classList.toggle('is-active', isActive);
+            option.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        renderGamesList();
+    };
+
+    sortButton.addEventListener('click', () => {
+        if (sortWrap.classList.contains('is-open')) {
+            closeSortMenu();
+            return;
+        }
+        openSortMenu();
+    }, { signal: listenersAbort.signal });
+
+    sortOptions.forEach((option) => {
+        option.addEventListener('click', () => {
+            const value = option.dataset.value;
+            if (!value) return;
+            setSortValue(value);
+            closeSortMenu();
+        }, { signal: listenersAbort.signal });
     });
 
+    window.addEventListener('click', (e) => {
+        if (!sortWrap.contains(e.target as Node)) {
+            closeSortMenu();
+        }
+    }, { signal: listenersAbort.signal });
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeSortMenu();
+        }
+    }, { signal: listenersAbort.signal });
+
+    window.addEventListener('hashchange', () => listenersAbort.abort(), { once: true });
+
+    setSortValue(sortBy);
     loadGames();
 }

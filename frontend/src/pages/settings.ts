@@ -1,9 +1,11 @@
 import { api } from '../api';
-import { showNotification } from '../main';
+import { showNotification } from '../ui';
 
 export async function mountSettingsModal() {
     const root = document.getElementById('modal-root')!;
     const settings = await api.getSettings();
+    const agentTokenResponse = await api.getAgentToken();
+    let currentAgentToken = agentTokenResponse.agent_token;
 
     const overlay = document.createElement('div');
     overlay.className = "gt-modal-overlay";
@@ -30,7 +32,7 @@ export async function mountSettingsModal() {
                         <svg class="w-5 h-5 text-cyan-300" fill="currentColor" viewBox="0 0 24 24"><path d="M11.979 0C5.668 0 .511 4.995.022 11.267l4.457 6.671a2.543 2.543 0 011.797-.726c.322 0 .627.061.91.168l2.954-4.431c-.012-.156-.02-.313-.02-.473 0-2.206 1.79-3.996 3.996-3.996.21 0 .414.02.615.052L16.588 5.73C15.19 2.64 12.136 0 8.5 0h3.479zM7.5 9.044c-1.655 0-2.996 1.341-2.996 2.996 0 1.654 1.341 2.996 2.996 2.996 1.654 0 2.996-1.342 2.996-2.996 0-1.655-1.342-2.996-2.996-2.996zm8.486 11.444l4.99-7.485c.596-.894.954-1.967.954-3.125 0-3.037-2.463-5.5-5.5-5.5-.43 0-.847.054-1.248.152l-2.78 4.17c.14.41.22.846.22 1.302 0 2.206-1.79 3.996-3.996 3.996-.456 0-.892-.08-1.302-.22l-4.17 2.78c-.098.401-.152.818-.152 1.248 0 3.037 2.463 5.5 5.5 5.5 1.158 0 2.231-.358 3.125-.954l-1.64-1.864z"/></svg>
                         Steam
                     </h3>
-                    <form id="steamForm" class="space-y-4">
+                    <form id="steamForm" class="space-y-4" novalidate>
                         <div>
                             <label class="block text-xs font-bold text-slate-300/80 uppercase tracking-widest mb-2">Steam Web API Key</label>
                             <input type="password" id="steamApiKey" class="gt-input text-sm" placeholder="Ваш API Key..." value="${settings.steam_api_key || ''}">
@@ -65,6 +67,15 @@ export async function mountSettingsModal() {
                             Скачать агент (.exe)
                         </button>
                     </div>
+
+                    <div class="p-4 bg-slate-900/65 rounded-xl border border-slate-600/45">
+                        <p class="text-sm text-slate-300 mb-2">Токен агента (используется для авторизации агента от вашего аккаунта):</p>
+                        <div class="text-xs font-mono text-slate-200 bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 break-all" id="agentTokenValue">${currentAgentToken}</div>
+                        <div class="mt-3 flex flex-col sm:flex-row gap-2">
+                            <button id="copyAgentTokenBtn" class="gt-btn justify-center">Скопировать токен</button>
+                            <button id="rotateAgentTokenBtn" class="gt-btn justify-center border-amber-300/40 bg-amber-300/10 hover:bg-amber-300/20">Пересоздать токен</button>
+                        </div>
+                    </div>
                 </section>
             </div>
     `;
@@ -90,7 +101,17 @@ export async function mountSettingsModal() {
     document.getElementById('steamForm')?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const apiKey = (document.getElementById('steamApiKey') as HTMLInputElement).value;
-        const profileUrl = (document.getElementById('steamProfileUrl') as HTMLInputElement).value;
+        const profileUrlInput = document.getElementById('steamProfileUrl') as HTMLInputElement;
+        const profileUrl = profileUrlInput.value.trim();
+        if (profileUrl) {
+            try {
+                new URL(profileUrl);
+            } catch {
+                showNotification('Введите корректную ссылку на профиль Steam.', 'error');
+                profileUrlInput.focus();
+                return;
+            }
+        }
 
         const btn = (e.currentTarget as HTMLFormElement).querySelector('button')!;
         const originalText = btn.innerHTML;
@@ -131,6 +152,37 @@ export async function mountSettingsModal() {
             showNotification('Агент загружен!', 'success');
         } catch (err: any) {
             showNotification(err.message || 'Ошибка загрузки агента', 'error');
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('copyAgentTokenBtn')?.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(currentAgentToken);
+            showNotification('Токен скопирован', 'success');
+        } catch {
+            showNotification('Не удалось скопировать токен', 'error');
+        }
+    });
+
+    document.getElementById('rotateAgentTokenBtn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('rotateAgentTokenBtn') as HTMLButtonElement;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = 'Обновление...';
+        btn.disabled = true;
+
+        try {
+            const data = await api.rotateAgentToken();
+            currentAgentToken = data.agent_token;
+            const tokenEl = document.getElementById('agentTokenValue');
+            if (tokenEl) {
+                tokenEl.textContent = currentAgentToken;
+            }
+            showNotification('Токен пересоздан. Обновите токен в агенте.', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Не удалось пересоздать токен', 'error');
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;

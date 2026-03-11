@@ -135,6 +135,31 @@ def fetch_steam_playtime(app_id: int) -> int:
         
     return 0
 
+
+def fetch_steam_genres(app_id: int) -> List[str]:
+    details_url = "https://store.steampowered.com/api/appdetails"
+    params = {
+        "appids": app_id,
+        "l": "english",
+        "cc": "US",
+    }
+    try:
+        res = requests.get(details_url, params=params, timeout=10)
+        res.raise_for_status()
+        payload = res.json()
+        app_payload = payload.get(str(app_id), {})
+        if not app_payload.get("success"):
+            return []
+        data = app_payload.get("data", {})
+        genres = data.get("genres", [])
+        names = [g.get("description", "").strip() for g in genres if isinstance(g, dict)]
+        # Keep order and deduplicate.
+        unique_names = list(dict.fromkeys([name for name in names if name]))
+        return unique_names
+    except Exception as e:
+        print(f"Steam genres fetch error: {e}")
+        return []
+
 def search_steam_games(query: str) -> List[Dict[str, Any]]:
     # This stays as is, it's a public storefront API
     search_url = f"https://store.steampowered.com/api/storesearch/?term={query}&l=english&cc=US"

@@ -13,7 +13,7 @@ def run_test():
             wiki = requests.post(f"http://127.0.0.1:8000/api/games/{game_id}/import/wiki", json={"url": "https://en.wikipedia.org/wiki/Super_Mario_Bros."})
             print(f"Imported {len(wiki.json())} wiki checklist items.")
             
-            steam = requests.post(f"http://127.0.0.1:8000/api/games/{game_id}/sync/steam")
+            steam = requests.post(f"http://127.0.0.1:8000/api/games/{game_id}/sync/steam/achievements")
             print(f"Synced {len(steam.json())} achievements.")
         else:
             print("Failed to create game.")

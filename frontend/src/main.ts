@@ -6,6 +6,7 @@ import { mountSettingsModal } from './pages/settings';
 import { mountAuthModal } from './pages/auth';
 import { mountAdminModal } from './pages/admin';
 import { ApiError, api } from './api';
+import { showConfirmDialog, showNotification } from './ui';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -27,43 +28,7 @@ window.addEventListener('error', (e) => {
     }
 });
 
-// Notification system
-export function showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
-    const container = document.getElementById('notification-container') || createNotificationContainer();
-    
-    const notification = document.createElement('div');
-    notification.className = `notification notification-${type}`;
-    
-    const icons = {
-        success: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>',
-        error: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
-        info: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
-    };
-    
-    notification.innerHTML = `
-        <div class="notification-icon">${icons[type]}</div>
-        <div class="notification-message">${message}</div>
-        <button class="notification-close" onclick="this.parentElement.remove()">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-        </button>
-    `;
-    
-    container.appendChild(notification);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-        notification.classList.add('notification-hide');
-        setTimeout(() => notification.remove(), 300);
-    }, 5000);
-}
-
-function createNotificationContainer() {
-    const container = document.createElement('div');
-    container.id = 'notification-container';
-    container.className = 'notification-container';
-    document.body.appendChild(container);
-    return container;
-}
+export { showNotification, showConfirmDialog };
 
 // Global loading state
 let loadingCount = 0;
@@ -95,6 +60,7 @@ export function hideLoading() {
 (window as any).showLoading = showLoading;
 (window as any).hideLoading = hideLoading;
 (window as any).showNotification = showNotification;
+(window as any).showConfirmDialog = showConfirmDialog;
 
 // Load user info and update navbar
 export async function loadUserInfo() {
@@ -107,11 +73,11 @@ export async function loadUserInfo() {
             const user = await api.getMe();
             usernameDisplay.textContent = user.username;
             userInfo.classList.remove('hidden');
-            userInfo.classList.add('flex');
+            userInfo.classList.add('inline-flex');
             
             if (user.is_superadmin && adminBtn) {
                 adminBtn.classList.remove('hidden');
-                adminBtn.classList.add('flex');
+                adminBtn.classList.add('inline-flex');
             }
             
             // Logout handler

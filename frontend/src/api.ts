@@ -14,9 +14,12 @@ export interface Game {
     status: string;
     cover_url?: string;
     description?: string;
-    sync_type: 'steam' | 'agent';
+    sync_type: 'steam' | 'non_steam';
     steam_app_id?: number;
     exe_name?: string;
+    launch_path?: string;
+    personal_rating?: number;
+    genres?: string[];
     created_at: string;
     total_playtime_minutes: number;
 }
@@ -35,6 +38,13 @@ export interface ChecklistItem {
     category: string;
     completed: boolean;
     sort_order: number;
+}
+
+export interface QuestCategory {
+    id: number;
+    game_id: number;
+    name: string;
+    created_at: string;
 }
 
 export interface Achievement {
@@ -61,6 +71,7 @@ export interface AgentConfigResponse {
     id: number;
     game_id: number;
     exe_name: string;
+    launch_path?: string;
     enabled: boolean;
     updated_at: string;
 }
@@ -236,6 +247,29 @@ export const api = {
         return handleResponse<ChecklistItem>(res);
     },
 
+    async getChecklistCategories(gameId: number): Promise<QuestCategory[]> {
+        const res = await fetch(`${API_BASE}/games/${gameId}/checklist/categories`, { headers: getAuthHeaders() });
+        return handleResponse<QuestCategory[]>(res);
+    },
+
+    async createChecklistCategory(gameId: number, name: string): Promise<QuestCategory> {
+        const res = await fetch(`${API_BASE}/games/${gameId}/checklist/categories`, {
+            method: 'POST',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        return handleResponse<QuestCategory>(res);
+    },
+
+    async renameChecklistCategory(gameId: number, oldName: string, newName: string): Promise<{ ok: boolean; category: string; updated_items: number }> {
+        const res = await fetch(`${API_BASE}/games/${gameId}/checklist/categories/${encodeURIComponent(oldName)}`, {
+            method: 'PUT',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_name: newName })
+        });
+        return handleResponse<{ ok: boolean; category: string; updated_items: number }>(res);
+    },
+
     async completeChecklistItem(itemId: number, completed: boolean): Promise<ChecklistItem> {
         const res = await fetch(`${API_BASE}/checklist/${itemId}?completed=${completed}`, {
             method: 'PUT',
@@ -307,11 +341,19 @@ export const api = {
     },
 
     async syncSteamAchievements(gameId: number): Promise<Achievement[]> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/sync/steam`, {
+        const res = await fetch(`${API_BASE}/games/${gameId}/sync/steam/achievements`, {
             method: 'POST',
             headers: getAuthHeaders()
         });
         return handleResponse<Achievement[]>(res);
+    },
+
+    async syncSteamManual(gameId: number): Promise<{ ok: boolean; added_minutes: number }> {
+        const res = await fetch(`${API_BASE}/games/${gameId}/sync/steam/manual`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        return handleResponse<{ ok: boolean; added_minutes: number }>(res);
     },
 
     async getSessions(gameId: number): Promise<GameSession[]> {
@@ -334,11 +376,11 @@ export const api = {
         return handleResponse<Game[]>(res);
     },
 
-    async configureAgent(game_id: number, exe_name: string, enabled: boolean = true): Promise<AgentConfigResponse> {
+    async configureAgent(game_id: number, launch_path: string, enabled: boolean = true): Promise<AgentConfigResponse> {
         const res = await fetch(`${API_BASE}/agent/configure`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ game_id, exe_name, enabled })
+            body: JSON.stringify({ game_id, launch_path, enabled })
         });
         return handleResponse<AgentConfigResponse>(res);
     },
@@ -358,6 +400,28 @@ export const api = {
             body: JSON.stringify({ game_id: gameId })
         });
         return handleResponse<{ ok: boolean, message: string, exe_name: string, status: string, duration_minutes?: number }>(res);
+    },
+
+    async requestAgentLaunch(gameId: number): Promise<{ ok: boolean, message: string, request_id: string }> {
+        const res = await fetch(`${API_BASE}/agent/launch`, {
+            method: 'POST',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ game_id: gameId })
+        });
+        return handleResponse<{ ok: boolean, message: string, request_id: string }>(res);
+    },
+
+    async getAgentToken(): Promise<{ ok: boolean, agent_token: string }> {
+        const res = await fetch(`${API_BASE}/agent/token`, { headers: getAuthHeaders() });
+        return handleResponse<{ ok: boolean, agent_token: string }>(res);
+    },
+
+    async rotateAgentToken(): Promise<{ ok: boolean, agent_token: string }> {
+        const res = await fetch(`${API_BASE}/agent/token/rotate`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        return handleResponse<{ ok: boolean, agent_token: string }>(res);
     }
 };
 

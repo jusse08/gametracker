@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { showNotification } from '../main';
+import { showNotification } from '../ui';
 
 export function mountAuthModal() {
     const root = document.getElementById('modal-root')!;
@@ -22,7 +22,7 @@ export function mountAuthModal() {
             </div>
 
             <!-- Login Form -->
-            <form id="loginForm" class="space-y-4">
+            <form id="loginForm" class="space-y-4" novalidate>
                 <div>
                     <label class="block text-xs font-bold text-slate-300/80 uppercase tracking-widest mb-2">Имя пользователя</label>
                     <input type="text" id="loginUsername" class="gt-input" required>
@@ -47,8 +47,21 @@ export function mountAuthModal() {
 
     document.getElementById('loginForm')!.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const username = (document.getElementById('loginUsername') as HTMLInputElement).value;
-        const password = (document.getElementById('loginPassword') as HTMLInputElement).value;
+        const usernameInput = document.getElementById('loginUsername') as HTMLInputElement;
+        const passwordInput = document.getElementById('loginPassword') as HTMLInputElement;
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+
+        if (!username) {
+            showNotification('Введите имя пользователя.', 'info');
+            usernameInput.focus();
+            return;
+        }
+        if (!password.trim()) {
+            showNotification('Введите пароль.', 'info');
+            passwordInput.focus();
+            return;
+        }
 
         const btn = (e.currentTarget as HTMLFormElement).querySelector('button')!;
         const originalText = btn.textContent;
