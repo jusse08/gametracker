@@ -205,3 +205,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+PLAN.md
+-e \"\n# Database\n*.db\n*.sqlite\n*.sqlite3\n\n# Environment files\n.env\n!.env.example\n\n# Node\nnode_modules/\ndist/\" 
