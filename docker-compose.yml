@@ -6,7 +6,7 @@ services:
     container_name: gametracker-backend
     restart: unless-stopped
     volumes:
-      - gametracker_data:/app/data
+      - ./gametracker_data:/app/data
     env_file:
       - .env
     environment:

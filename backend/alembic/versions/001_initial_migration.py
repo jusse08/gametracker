@@ -28,10 +28,9 @@ def upgrade() -> None:
         sa.Column('status', sqlmodel.sql.sqltypes.AutoString(), nullable=False, server_default='backlog'),
         sa.Column('cover_url', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column('source', sqlmodel.sql.sqltypes.AutoString(), nullable=False, server_default='manual'),
+        sa.Column('sync_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False, server_default='steam'),
         sa.Column('steam_app_id', sa.Integer(), nullable=True),
         sa.Column('exe_name', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column('tracking_mode', sqlmodel.sql.sqltypes.AutoString(), nullable=False, server_default='manual'),
         sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.text('(CURRENT_TIMESTAMP)')),
         sa.PrimaryKeyConstraint('id')
     )
