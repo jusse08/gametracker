@@ -21,19 +21,6 @@ function compareGames(a: Game, b: Game, sortBy: string): number {
     return Date.parse(b.created_at) - Date.parse(a.created_at);
 }
 
-function getQuestText(stats: { playing: number; backlog: number; completed: number; totalMinutes: number }): string {
-    if (stats.playing === 0 && stats.backlog > 0) {
-        return 'Квест дня: выбери игру из бэклога и запусти первую сессию.';
-    }
-    if (stats.totalMinutes < 300) {
-        return 'Квест дня: добей 5 часов общего времени для открытия ранга Scout.';
-    }
-    if (stats.completed < 3) {
-        return 'Квест дня: закрой хотя бы одну игру и пополни зал трофеев.';
-    }
-    return 'Квест дня: синхронизируй достижения и обнови боевой журнал.';
-}
-
 export async function renderLibrary(container: HTMLElement) {
     container.innerHTML = `
         <section class="gt-panel p-5 md:p-7 mb-6 overflow-hidden relative">
@@ -52,13 +39,25 @@ export async function renderLibrary(container: HTMLElement) {
             </div>
         </section>
 
-        <section class="grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-4 mb-5">
-            <div class="gt-panel p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                <div class="relative flex-1">
+        <section class="gt-panel library-status-shell mb-4 p-3 md:p-4">
+            <div class="library-status-header">
+                <p class="library-status-title">Раздел библиотеки</p>
+                <p class="library-status-subtitle">Переключение активного статуса</p>
+            </div>
+            <div class="library-status-tabs">
+                <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold bg-cyan-500/20 text-cyan-200 border border-cyan-400/30 active-tab" data-status="playing">Играю</button>
+                <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="backlog">Запланировано</button>
+                <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="completed">Пройдено</button>
+            </div>
+        </section>
+
+        <section class="mb-5">
+            <div class="gt-panel p-4 library-filters">
+                <div class="relative library-search-wrap">
                     <input id="librarySearch" class="gt-input pr-9" type="text" placeholder="Быстрый поиск по библиотеке...">
                     <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
-                <select id="librarySort" class="gt-input w-full sm:w-[240px]">
+                <select id="librarySort" class="gt-input library-sort">
                     <option value="created-desc">Сначала новые</option>
                     <option value="playtime-desc">По времени (убыв.)</option>
                     <option value="playtime-asc">По времени (возр.)</option>
@@ -66,17 +65,6 @@ export async function renderLibrary(container: HTMLElement) {
                     <option value="title-desc">По названию (Я-А)</option>
                 </select>
             </div>
-
-            <div class="gt-panel p-4 min-w-[260px]">
-                <p class="text-xs text-cyan-200/80 uppercase tracking-[0.15em] mb-2">Daily Quest</p>
-                <p id="dailyQuestText" class="text-sm text-slate-200">Синхронизация боевых задач...</p>
-            </div>
-        </section>
-
-        <section class="mb-4 flex flex-wrap gap-2 bg-slate-900/40 border border-slate-600/30 p-1.5 rounded-2xl w-fit">
-            <button class="status-tab px-4 py-2 rounded-xl text-sm font-semibold bg-cyan-500/20 text-cyan-200 border border-cyan-400/30 active-tab" data-status="playing">Играю</button>
-            <button class="status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="backlog">Запланировано</button>
-            <button class="status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="completed">Пройдено</button>
         </section>
 
         <section id="gamesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 lg:gap-5 relative min-h-[420px]"></section>
@@ -85,7 +73,6 @@ export async function renderLibrary(container: HTMLElement) {
     const grid = container.querySelector<HTMLElement>('#gamesGrid')!;
     const searchInput = container.querySelector<HTMLInputElement>('#librarySearch')!;
     const sortSelect = container.querySelector<HTMLSelectElement>('#librarySort')!;
-    const questTextEl = container.querySelector<HTMLElement>('#dailyQuestText')!;
 
     let dragMirror: HTMLElement | null = null;
     let gamesByStatus: Game[] = [];
@@ -131,7 +118,6 @@ export async function renderLibrary(container: HTMLElement) {
     function hydrateStats(allGames: Game[]) {
         const playing = allGames.filter((g) => g.status === 'playing').length;
         const completed = allGames.filter((g) => g.status === 'completed').length;
-        const backlog = allGames.filter((g) => g.status === 'backlog').length;
         const totalMinutes = allGames.reduce((sum, game) => sum + game.total_playtime_minutes, 0);
         const totalHours = (totalMinutes / 60).toFixed(1);
 
@@ -139,13 +125,6 @@ export async function renderLibrary(container: HTMLElement) {
         (container.querySelector('#statPlaying') as HTMLElement).textContent = String(playing);
         (container.querySelector('#statCompleted') as HTMLElement).textContent = String(completed);
         (container.querySelector('#statHours') as HTMLElement).textContent = totalHours;
-
-        questTextEl.textContent = getQuestText({
-            playing,
-            backlog,
-            completed,
-            totalMinutes
-        });
     }
 
     function getFilteredGames() {

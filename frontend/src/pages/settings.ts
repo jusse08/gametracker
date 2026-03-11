@@ -5,12 +5,14 @@ export async function mountSettingsModal() {
     const root = document.getElementById('modal-root')!;
     const settings = await api.getSettings();
 
-    const modal = document.createElement('div');
-    modal.className = "fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md";
-    modal.id = "settingsModal";
+    const overlay = document.createElement('div');
+    overlay.className = "gt-modal-overlay";
+    overlay.id = "settingsModal";
 
-    modal.innerHTML = `
-        <div class="gt-panel w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+    const panel = document.createElement('div');
+    panel.className = "gt-panel gt-modal-panel w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto";
+
+    panel.innerHTML = `
             <div class="p-6 border-b border-slate-600/45 flex justify-between items-center bg-slate-900/55 sticky top-0">
                 <h2 class="text-xl font-bold flex items-center gap-3">
                     <svg class="w-6 h-6 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -65,19 +67,24 @@ export async function mountSettingsModal() {
                     </div>
                 </section>
             </div>
-        </div>
     `;
 
-    root.appendChild(modal);
+    overlay.appendChild(panel);
+    root.appendChild(overlay);
+    requestAnimationFrame(() => {
+        overlay.classList.add('is-open');
+        panel.classList.add('is-open');
+    });
 
     // Bindings
     const close = () => {
-        modal.classList.add('opacity-0');
-        setTimeout(() => modal.remove(), 200);
+        overlay.classList.remove('is-open');
+        panel.classList.remove('is-open');
+        setTimeout(() => overlay.remove(), 240);
     };
 
     document.getElementById('closeSettingsBtn')?.addEventListener('click', close);
-    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
     // Steam form
     document.getElementById('steamForm')?.addEventListener('submit', async (e) => {

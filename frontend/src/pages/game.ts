@@ -106,11 +106,30 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                                 <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                 Прогресс выполнения
                             </h2>
-                            <span id="progressText" class="text-sm font-medium text-gray-400 bg-gray-900 px-3 py-1 rounded-full border border-gray-700">0%</span>
                         </div>
-                        
-                        <div class="w-full bg-gray-900 rounded-full h-3 mb-8 overflow-hidden border border-gray-800">
-                            <div id="progressBar" class="bg-gradient-to-r from-emerald-500 to-blue-500 h-3 rounded-full transition-all duration-1000 w-[0%]"></div>
+
+                        <div class="space-y-4 mb-8">
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm text-gray-300">Квесты</span>
+                                    <span id="questProgressText" class="text-xs font-medium text-gray-400 bg-gray-900 px-2.5 py-1 rounded-full border border-gray-700">0%</span>
+                                </div>
+                                <div class="w-full bg-gray-900 rounded-full h-3 overflow-hidden border border-gray-800">
+                                    <div id="questProgressBar" class="bg-gradient-to-r from-emerald-500 to-green-400 h-3 rounded-full transition-all duration-1000 w-[0%]"></div>
+                                </div>
+                            </div>
+
+                            ${game.sync_type === 'steam' ? `
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm text-gray-300">Ачивки</span>
+                                    <span id="achievementProgressText" class="text-xs font-medium text-gray-400 bg-gray-900 px-2.5 py-1 rounded-full border border-gray-700">0%</span>
+                                </div>
+                                <div class="w-full bg-gray-900 rounded-full h-3 overflow-hidden border border-gray-800">
+                                    <div id="achievementProgressBar" class="bg-gradient-to-r from-amber-500 to-yellow-400 h-3 rounded-full transition-all duration-1000 w-[0%]"></div>
+                                </div>
+                            </div>
+                            ` : ''}
                         </div>
 
                         <div id="checklistContainer">
@@ -135,6 +154,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                         </form>
                     </div>
 
+                    ${game.sync_type === 'steam' ? `
                     <!-- Achievements Section -->
                     <div class="bg-gray-800/50 rounded-2xl p-6 border border-gray-700/50 flex flex-col min-h-[250px] relative overflow-hidden group">
                         <div class="absolute inset-0 bg-gradient-to-br from-blue-900/10 to-purple-900/10 z-0"></div>
@@ -150,6 +170,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                             <div class="animate-pulse h-20 bg-gray-700/30 rounded-xl col-span-2 sm:col-span-3"></div>
                         </div>
                     </div>
+                    ` : ''}
                 </div>
 
                 <!-- Sidebar (Right) -->
@@ -205,7 +226,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
 
         await Promise.all([
             loadChecklists(gameId),
-            loadAchievements(gameId),
+            game.sync_type === 'steam' ? loadAchievements(gameId) : Promise.resolve(),
             loadNotes(gameId),
             loadHistory(gameId),
             updateProgressBar(gameId)
@@ -516,7 +537,10 @@ async function loadAchievements(gameId: number) {
         api.getGame(gameId),
         api.getAchievements(gameId)
     ]);
-    const container = document.getElementById('achievementsContainer')!;
+    const container = document.getElementById('achievementsContainer');
+    if (!container) {
+        return;
+    }
     container.innerHTML = '';
 
     if (game.sync_type !== 'steam') {
@@ -554,18 +578,28 @@ async function updateProgressBar(gameId: number) {
         api.getAchievements(gameId)
     ]);
 
-    const achievementTotal = game.sync_type === 'steam' ? achievements.length : 0;
-    const achievementCompleted = game.sync_type === 'steam' ? achievements.filter(a => a.completed).length : 0;
-    const total = checklists.length + achievementTotal;
-    const completed = checklists.filter(c => c.completed).length + achievementCompleted;
-    
-    const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
-    
-    const textEl = document.getElementById('progressText');
-    const barEl = document.getElementById('progressBar');
-    
-    if (textEl) textEl.innerText = `${percent}%`;
-    if (barEl) barEl.style.width = `${percent}%`;
+    const questTotal = checklists.length;
+    const questCompleted = checklists.filter(c => c.completed).length;
+    const questPercent = questTotal === 0 ? 0 : Math.round((questCompleted / questTotal) * 100);
+
+    const isSteamSync = game.sync_type === 'steam';
+    const achievementTotal = isSteamSync ? achievements.length : 0;
+    const achievementCompleted = isSteamSync ? achievements.filter(a => a.completed).length : 0;
+    const achievementPercent = achievementTotal === 0 ? 0 : Math.round((achievementCompleted / achievementTotal) * 100);
+
+    const questTextEl = document.getElementById('questProgressText');
+    const questBarEl = document.getElementById('questProgressBar');
+    const achievementTextEl = document.getElementById('achievementProgressText');
+    const achievementBarEl = document.getElementById('achievementProgressBar');
+
+    if (questTextEl) questTextEl.innerText = `${questPercent}%`;
+    if (questBarEl) questBarEl.style.width = `${questPercent}%`;
+
+    if (achievementTextEl) achievementTextEl.innerText = `${achievementPercent}%`;
+    if (achievementBarEl) {
+        achievementBarEl.style.width = `${achievementPercent}%`;
+        achievementBarEl.style.opacity = '1';
+    }
 }
 
 async function loadHistory(gameId: number) {

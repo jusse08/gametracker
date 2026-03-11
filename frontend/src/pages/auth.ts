@@ -3,12 +3,15 @@ import { showNotification } from '../main';
 
 export function mountAuthModal() {
     const root = document.getElementById('modal-root')!;
+    if (root.querySelector('.gt-modal-overlay')) {
+        return;
+    }
 
     const overlay = document.createElement('div');
-    overlay.className = "fixed inset-0 bg-black/75 backdrop-blur-md z-[100] flex items-center justify-center p-4";
+    overlay.className = "gt-modal-overlay";
 
     const modal = document.createElement('div');
-    modal.className = "gt-panel rounded-2xl w-full max-w-md shadow-2xl overflow-hidden";
+    modal.className = "gt-panel gt-modal-panel rounded-2xl w-full max-w-md shadow-2xl overflow-hidden";
 
     modal.innerHTML = `
         <div class="p-8 relative">
@@ -37,6 +40,10 @@ export function mountAuthModal() {
 
     overlay.appendChild(modal);
     root.appendChild(overlay);
+    requestAnimationFrame(() => {
+        overlay.classList.add('is-open');
+        modal.classList.add('is-open');
+    });
 
     document.getElementById('loginForm')!.addEventListener('submit', async (e) => {
         e.preventDefault();

@@ -5,10 +5,10 @@ export async function mountAdminModal() {
     const root = document.getElementById('modal-root')!;
 
     const overlay = document.createElement('div');
-    overlay.className = "fixed inset-0 bg-black/75 backdrop-blur-md z-[100] flex items-center justify-center p-4";
+    overlay.className = "gt-modal-overlay";
 
     const modal = document.createElement('div');
-    modal.className = "gt-panel rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col";
+    modal.className = "gt-panel gt-modal-panel rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col";
 
     modal.innerHTML = `
         <div class="px-6 py-4 border-b border-slate-600/40 flex justify-between items-center bg-slate-900/55 sticky top-0">
@@ -65,13 +65,21 @@ export async function mountAdminModal() {
 
     overlay.appendChild(modal);
     root.appendChild(overlay);
-
-    document.getElementById('closeAdminBtn')!.addEventListener('click', () => {
-        overlay.remove();
+    requestAnimationFrame(() => {
+        overlay.classList.add('is-open');
+        modal.classList.add('is-open');
     });
 
+    const closeModal = () => {
+        overlay.classList.remove('is-open');
+        modal.classList.remove('is-open');
+        setTimeout(() => overlay.remove(), 240);
+    };
+
+    document.getElementById('closeAdminBtn')!.addEventListener('click', closeModal);
+
     overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) overlay.remove();
+        if (e.target === overlay) closeModal();
     });
 
     const tbody = document.getElementById('usersTableBody')!;

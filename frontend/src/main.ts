@@ -118,7 +118,6 @@ export async function loadUserInfo() {
             document.getElementById('logoutBtn')?.addEventListener('click', () => {
                 api.logout();
                 window.location.hash = '#auth';
-                window.location.reload();
             });
         } catch (e) {
             // Token invalid
@@ -128,17 +127,15 @@ export async function loadUserInfo() {
 }
 
 function router() {
-    const hash = window.location.hash || '#library';
-    
-    // Check auth status
-    if (!isLoggedIn() && !hash.startsWith('#auth')) {
-        mountAuthModal();
-        return;
-    }
-    
+    const hash = window.location.hash || (isLoggedIn() ? '#library' : '#auth');
+
     app.innerHTML = ''; // clear
 
-    if (hash === '#library') {
+    if (hash.startsWith('#auth')) {
+        mountAuthModal();
+    } else if (!isLoggedIn()) {
+        mountAuthModal();
+    } else if (hash === '#library') {
         renderLibrary(app);
     } else if (hash.startsWith('#game/')) {
         const id = parseInt(hash.replace('#game/', ''), 10);

@@ -5,11 +5,11 @@ export function mountAddGameModal() {
     
     // Create animated overlay
     const overlay = document.createElement('div');
-    overlay.className = "fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 ease-out";
+    overlay.className = "gt-modal-overlay";
     
     // Modal content container
     const modal = document.createElement('div');
-    modal.className = "gt-panel rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden transform scale-95 opacity-0 transition-all duration-300 ease-out flex flex-col max-h-[90vh]";
+    modal.className = "gt-panel gt-modal-panel rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]";
     
     modal.innerHTML = `
         <div class="p-6 border-b border-slate-600/45 flex justify-between items-center bg-slate-900/55">
@@ -28,7 +28,7 @@ export function mountAddGameModal() {
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-cyan-300 transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
-                    <input type="text" id="dbQuery" placeholder="Название игры (напр. Witcher 3)..." class="gt-input pl-10" required>
+                    <input type="text" id="dbQuery" placeholder="Название игры (напр. Witcher 3)..." class="gt-input gt-input-icon" required>
                 </div>
                 <button type="submit" class="gt-btn gt-btn-primary px-6 py-3 whitespace-nowrap">
                     Найти
@@ -54,19 +54,15 @@ export function mountAddGameModal() {
 
     // Trigger animations in next frame
     requestAnimationFrame(() => {
-        overlay.classList.remove('opacity-0');
-        overlay.classList.add('opacity-100');
-        modal.classList.remove('scale-95', 'opacity-0');
-        modal.classList.add('scale-100', 'opacity-100');
+        overlay.classList.add('is-open');
+        modal.classList.add('is-open');
         document.getElementById('dbQuery')?.focus();
     });
 
     const closeModal = () => {
-        overlay.classList.remove('opacity-100');
-        overlay.classList.add('opacity-0');
-        modal.classList.remove('scale-100', 'opacity-100');
-        modal.classList.add('scale-95', 'opacity-0');
-        setTimeout(() => root.innerHTML = '', 300);
+        overlay.classList.remove('is-open');
+        modal.classList.remove('is-open');
+        setTimeout(() => root.innerHTML = '', 240);
     };
 
     overlay.addEventListener('click', (e) => {

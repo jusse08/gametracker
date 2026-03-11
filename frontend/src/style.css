@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700;800&family=Rajdhani:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -20,6 +20,19 @@
     box-sizing: border-box;
 }
 
+button:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+}
+
+button:disabled,
+input[type="button"]:disabled,
+input[type="submit"]:disabled {
+    cursor: not-allowed;
+}
+
 html,
 body {
     margin: 0;
@@ -28,7 +41,7 @@ body {
 
 body {
     color: var(--text-main);
-    font-family: "Oxanium", "Segoe UI", sans-serif;
+    font-family: "Exo 2", "Segoe UI", sans-serif;
     background: radial-gradient(circle at 10% 15%, rgba(20, 212, 255, 0.18), transparent 35%),
         radial-gradient(circle at 88% 4%, rgba(111, 255, 140, 0.12), transparent 40%),
         radial-gradient(circle at 45% 75%, rgba(56, 89, 193, 0.25), transparent 45%),
@@ -91,7 +104,7 @@ body::after {
     gap: 0.65rem;
     text-decoration: none;
     letter-spacing: 0.03em;
-    font-family: "Rajdhani", sans-serif;
+    font-family: "Exo 2", sans-serif;
     font-size: 1.8rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -119,12 +132,18 @@ body::after {
 
 .gt-user {
     border: 1px solid var(--line-soft);
-    background: rgba(22, 31, 54, 0.58);
-    color: var(--text-muted);
-    border-radius: 999px;
-    padding: 0.42rem 0.85rem;
+    background: linear-gradient(180deg, rgba(22, 31, 54, 0.92), rgba(14, 22, 38, 0.92));
+    color: var(--text-main);
+    border-radius: 12px;
+    padding: 0.62rem 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: "Exo 2", sans-serif;
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+    line-height: 1;
 }
 
 .gt-btn,
@@ -138,7 +157,7 @@ body::after {
     align-items: center;
     gap: 0.45rem;
     text-decoration: none;
-    font-family: "Rajdhani", sans-serif;
+    font-family: "Exo 2", sans-serif;
     font-weight: 600;
     letter-spacing: 0.02em;
     transition: 0.2s ease;
@@ -218,6 +237,10 @@ body::after {
     box-shadow: 0 0 0 3px rgba(20, 212, 255, 0.14);
 }
 
+.gt-input-icon {
+    padding-left: 2.5rem;
+}
+
 .gt-progress-track {
     border-radius: 999px;
     background: rgba(2, 8, 18, 0.8);
@@ -231,6 +254,90 @@ body::after {
     border-radius: inherit;
     background: linear-gradient(90deg, #12cff6, #6fff8c);
     box-shadow: 0 0 24px rgba(20, 212, 255, 0.55);
+}
+
+.gt-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    transition: opacity 220ms ease;
+}
+
+.gt-modal-overlay.is-open {
+    opacity: 1;
+}
+
+.gt-modal-panel {
+    transform: translateY(10px) scale(0.97);
+    opacity: 0;
+    transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 220ms ease;
+}
+
+.gt-modal-panel.is-open {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+}
+
+.library-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.library-search-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.library-sort {
+    flex: 0 0 auto;
+    width: 240px;
+    max-width: 100%;
+}
+
+.library-status-shell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.9rem;
+}
+
+.library-status-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.library-status-title {
+    margin: 0;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(171, 197, 232, 0.85);
+    font-weight: 700;
+}
+
+.library-status-subtitle {
+    margin: 0;
+    font-size: 0.84rem;
+    color: rgba(145, 167, 202, 0.85);
+}
+
+.library-status-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.3rem;
+    border-radius: 14px;
+    border: 1px solid rgba(102, 122, 159, 0.38);
+    background: rgba(8, 14, 27, 0.72);
 }
 
 /* Drag and Drop */
@@ -273,6 +380,14 @@ body::after {
 
 .status-tab {
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.library-status-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    min-height: 2.45rem;
 }
 
 .games-grid-dragging {
@@ -471,5 +586,24 @@ body::after {
     .notification {
         min-width: 0;
         width: calc(100vw - 2rem);
+    }
+
+    .library-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .library-sort {
+        width: 100%;
+    }
+
+    .library-status-shell {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .library-status-tabs {
+        width: 100%;
+        justify-content: space-between;
     }
 }
