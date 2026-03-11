@@ -586,7 +586,7 @@ def test_agent_ping(
     if not game.exe_name:
         raise HTTPException(
             status_code=400,
-            detail="Для игры не указан исполняемый файл. Укажите exe_name в карточке игры."
+            detail="Для игры не указан исполняемый файл. Укажите его в карточке игры."
         )
 
     # Проверяем, есть ли конфиг для этого exe
@@ -599,7 +599,7 @@ def test_agent_ping(
     if not config:
         raise HTTPException(
             status_code=400,
-            detail="Агент не настроен для этой игры. Включите отслеживание в настройках."
+            detail="Агент не настроен для этой игры. Сохраните исполняемый файл в карточке игры."
         )
     now = datetime.utcnow()
     session_obj, status_name = upsert_agent_session(

@@ -57,12 +57,11 @@ export async function mountSettingsModal() {
                     </h3>
                     
                     <div class="mb-4 p-4 bg-gray-900 rounded-xl border border-gray-700">
-                        <p class="text-sm text-gray-300 mb-3">Агент отслеживает запущенные игры и автоматически фиксирует время в разделе "Библиотека".</p>
+                        <p class="text-sm text-gray-300 mb-3">Агент отслеживает запущенные игры и автоматически фиксирует время в разделе "Библиотека". Настройка исполняемого файла доступна только в карточке конкретной игры.</p>
                         <button id="downloadAgentBtn" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-2">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                             Скачать агент (.exe)
                         </button>
-                        <p class="text-xs text-gray-500 mt-3">Привязка <code>process.exe</code> теперь настраивается внутри карточки конкретной игры, если она добавлена через агент.</p>
                     </div>
                 </section>
             </div>
