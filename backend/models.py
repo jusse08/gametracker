@@ -31,10 +31,9 @@ class GameBase(SQLModel):
     status: str = Field(default="backlog", description="playing | backlog | completed | wishlist")
     cover_url: Optional[str] = None
     description: Optional[str] = None
-    source: str = Field(default="manual", description="steam | manual")
+    sync_type: str = Field(default="steam", description="steam | agent")
     steam_app_id: Optional[int] = None
     exe_name: Optional[str] = None
-    tracking_mode: str = Field(default="manual", description="steam_api | agent | manual")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Game(GameBase, table=True):
@@ -185,6 +184,5 @@ class GameUpdate(SQLModel):
     status: Optional[str] = None
     cover_url: Optional[str] = None
     description: Optional[str] = None
+    sync_type: Optional[str] = None
     exe_name: Optional[str] = None
-    tracking_mode: Optional[str] = None
-

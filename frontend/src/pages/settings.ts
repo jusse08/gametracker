@@ -4,7 +4,6 @@ import { showNotification } from '../main';
 export async function mountSettingsModal() {
     const root = document.getElementById('modal-root')!;
     const settings = await api.getSettings();
-    const games = await api.getAgentGames().catch(() => []);
 
     const modal = document.createElement('div');
     modal.className = "fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in";
@@ -63,31 +62,7 @@ export async function mountSettingsModal() {
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                             Скачать агент (.exe)
                         </button>
-                    </div>
-
-                    <div class="space-y-3">
-                        <h4 class="text-sm font-medium text-gray-400 uppercase tracking-wider">Настройка отслеживания игр</h4>
-                        ${games.length === 0 ? `
-                            <p class="text-sm text-gray-500 italic">У вас пока нет игр в библиотеке.</p>
-                        ` : `
-                            <div class="space-y-2 max-h-64 overflow-y-auto">
-                                ${games.map(game => `
-                                    <div class="flex items-center gap-3 bg-gray-900 rounded-lg p-3 border border-gray-700" data-game-id="${game.id}">
-                                        <div class="flex-1 min-w-0">
-                                            <p class="text-sm font-medium text-white truncate">${game.title}</p>
-                                            <p class="text-xs text-gray-500">${game.exe_name ? 'EXE: ' + game.exe_name : 'Не настроено'}</p>
-                                        </div>
-                                        <input type="text" placeholder="process.exe" class="w-32 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-emerald-500 outline-none" value="${game.exe_name || ''}" data-exe-input="${game.id}">
-                                        <button class="configureAgentBtn bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1 px-3 rounded transition-all" data-game-id="${game.id}">
-                                            OK
-                                        </button>
-                                        <button class="testPingBtn bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1 px-3 rounded transition-all" data-game-id="${game.id}">
-                                            Проверить
-                                        </button>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        `}
+                        <p class="text-xs text-gray-500 mt-3">Привязка <code>process.exe</code> теперь настраивается внутри карточки конкретной игры, если она добавлена через агент.</p>
                     </div>
                 </section>
             </div>
@@ -156,54 +131,4 @@ export async function mountSettingsModal() {
         }
     });
 
-    // Configure agent
-    document.querySelectorAll('.configureAgentBtn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const gameId = (e.currentTarget as HTMLButtonElement).dataset.gameId!;
-            const exeInput = document.querySelector(`[data-exe-input="${gameId}"]`) as HTMLInputElement;
-            const exeName = exeInput.value.trim();
-
-            if (!exeName) {
-                showNotification('Введите имя exe-файла', 'error');
-                return;
-            }
-
-            const originalText = (e.currentTarget as HTMLButtonElement).textContent;
-            (e.currentTarget as HTMLButtonElement).textContent = '...';
-
-            try {
-                await api.configureAgent(parseInt(gameId), exeName, true);
-                showNotification(`Агент настроен для ${exeName}`, 'success');
-                
-                // Update the display
-                const gameDiv = document.querySelector(`[data-game-id="${gameId}"]`);
-                if (gameDiv) {
-                    const exeDisplay = gameDiv.querySelector('.text-gray-500');
-                    if (exeDisplay) exeDisplay.textContent = 'EXE: ' + exeName;
-                }
-            } catch (err: any) {
-                showNotification(err.message || 'Ошибка настройки агента', 'error');
-            } finally {
-                (e.currentTarget as HTMLButtonElement).textContent = originalText;
-            }
-        });
-    });
-
-    // Test ping
-    document.querySelectorAll('.testPingBtn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const gameId = (e.currentTarget as HTMLButtonElement).dataset.gameId!;
-            const originalText = (e.currentTarget as HTMLButtonElement).textContent;
-            (e.currentTarget as HTMLButtonElement).textContent = '...';
-
-            try {
-                const result = await api.testAgentPing(parseInt(gameId));
-                showNotification(result.message, 'success');
-            } catch (err: any) {
-                showNotification(err.message || 'Ошибка проверки связи', 'error');
-            } finally {
-                (e.currentTarget as HTMLButtonElement).textContent = originalText;
-            }
-        });
-    });
 }

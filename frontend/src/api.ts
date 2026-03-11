@@ -14,10 +14,9 @@ export interface Game {
     status: string;
     cover_url?: string;
     description?: string;
-    source: string;
+    sync_type: 'steam' | 'agent';
     steam_app_id?: number;
     exe_name?: string;
-    tracking_mode: string;
     created_at: string;
     total_playtime_minutes: number;
 }
@@ -56,6 +55,14 @@ export interface GameSession {
     ended_at?: string;
     duration_minutes: number;
     source: string;
+}
+
+export interface AgentConfigResponse {
+    id: number;
+    game_id: number;
+    exe_name: string;
+    enabled: boolean;
+    updated_at: string;
 }
 
 export interface Settings {
@@ -327,13 +334,13 @@ export const api = {
         return handleResponse<Game[]>(res);
     },
 
-    async configureAgent(game_id: number, exe_name: string, enabled: boolean = true): Promise<{ id: number, game_id: number, exe_name: string, enabled: boolean, updated_at: string }> {
+    async configureAgent(game_id: number, exe_name: string, enabled: boolean = true): Promise<AgentConfigResponse> {
         const res = await fetch(`${API_BASE}/agent/configure`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ game_id, exe_name, enabled })
         });
-        return handleResponse(res);
+        return handleResponse<AgentConfigResponse>(res);
     },
 
     async deleteAgentConfig(gameId: number): Promise<{ ok: boolean }> {
@@ -350,7 +357,7 @@ export const api = {
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ game_id: gameId })
         });
-        return handleResponse(res);
+        return handleResponse<{ ok: boolean, message: string, exe_name: string, status: string, duration_minutes?: number }>(res);
     }
 };
 

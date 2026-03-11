@@ -18,10 +18,10 @@ from models import (
     Note, NoteCreate, NoteRead,
     ChecklistItem, ChecklistItemCreate, ChecklistItemRead,
     Achievement, AchievementRead,
-    AgentConfig, AgentConfigCreate, AgentConfigRead, Session as DbSession, SessionRead,
+    AgentConfig, AgentConfigRead, Session as DbSession, SessionRead,
     Settings, SettingsUpdate,
 )
-from schemas import PingRequest, WikiImportRequest
+from schemas import PingRequest, WikiImportRequest, AgentConfigRequest, AgentTestPingRequest
 from auth import (
     get_current_user, get_password_hash, create_access_token,
     verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -89,6 +89,11 @@ def build_game_read(session: Session, game: Game) -> GameRead:
     game_read = GameRead.model_validate(game)
     game_read.total_playtime_minutes = get_total_playtime_minutes(session, game.id)
     return game_read
+
+def validate_sync_type(sync_type: str) -> str:
+    if sync_type not in {"steam", "agent"}:
+        raise HTTPException(status_code=400, detail="sync_type must be 'steam' or 'agent'")
+    return sync_type
 
 def upsert_agent_session(
     session: Session,
@@ -221,18 +226,23 @@ def create_game(
     current_user: User = Depends(get_current_user),
     game: GameCreate
 ):
+    validate_sync_type(game.sync_type)
+
     # Check for duplicate title for this user
     existing = session.exec(
         select(Game).where(Game.title == game.title, Game.user_id == current_user.id)
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Game with this title already exists")
-    
+
+    if game.sync_type == "steam":
+        game.exe_name = None
+
     db_game = Game.model_validate(game, update={"user_id": current_user.id})
     session.add(db_game)
     session.commit()
     session.refresh(db_game)
-    return db_game
+    return build_game_read(session, db_game)
 
 @app.get("/api/games", response_model=List[GameRead])
 def read_games(
@@ -277,21 +287,24 @@ def update_game(
     db_game = session.get(Game, game_id)
     if not db_game or db_game.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Game not found")
-    
+
     data = game_data.model_dump(exclude_unset=True)
+    if "sync_type" in data:
+        validate_sync_type(data["sync_type"])
+
     for key, value in data.items():
         setattr(db_game, key, value)
-    
+
+    if db_game.sync_type == "steam":
+        db_game.exe_name = None
+        existing_config = session.exec(select(AgentConfig).where(AgentConfig.game_id == game_id)).first()
+        if existing_config:
+            session.delete(existing_config)
+
     session.add(db_game)
     session.commit()
     session.refresh(db_game)
-    
-    playtime_query = select(DbSession.duration_minutes).where(DbSession.game_id == game_id)
-    total_minutes = sum(session.exec(playtime_query) or [0])
-    
-    game_read = GameRead.model_validate(db_game)
-    game_read.total_playtime_minutes = total_minutes
-    return game_read
+    return build_game_read(session, db_game)
 
 @app.delete("/api/games/{game_id}")
 def delete_game(
@@ -559,19 +572,23 @@ def test_agent_ping(
     *,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
-    game_id: int
+    req: AgentTestPingRequest
 ):
     """Проверить связь с агентом для указанной игры."""
+    game_id = req.game_id
     game = session.get(Game, game_id)
     if not game or game.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Игра не найдена")
-    
+
+    if game.sync_type != "agent":
+        raise HTTPException(status_code=400, detail="Проверка агента доступна только для agent-игр")
+
     if not game.exe_name:
         raise HTTPException(
             status_code=400,
-            detail="Для игры не указан исполняемый файл. Укажите exe_name в настройках игры."
+            detail="Для игры не указан исполняемый файл. Укажите exe_name в карточке игры."
         )
-    
+
     # Проверяем, есть ли конфиг для этого exe
     config_query = select(AgentConfig).where(
         AgentConfig.game_id == game_id,
@@ -584,68 +601,22 @@ def test_agent_ping(
             status_code=400,
             detail="Агент не настроен для этой игры. Включите отслеживание в настройках."
         )
-    
-    # Отправляем тестовый пинг
     now = datetime.utcnow()
-    ping_session_req = PingRequest(game_id=game_id, timestamp=now.isoformat())
-    
-    # Вызываем логику пинга напрямую
-    query = select(DbSession).where(
-        DbSession.game_id == game_id,
-        DbSession.source == "agent"
-    ).order_by(DbSession.started_at.desc())
-    
-    active_session_obj = session.exec(query).first()
-    
-    if active_session_obj:
-        last_ended_at = active_session_obj.ended_at or active_session_obj.started_at
-        diff_minutes = (now - last_ended_at).total_seconds() / 60.0
-        
-        if diff_minutes > 5:
-            new_session = DbSession(
-                game_id=game_id,
-                started_at=now,
-                ended_at=now,
-                source="agent_test",
-                duration_minutes=0
-            )
-            session.add(new_session)
-            session.commit()
-            return {
-                "ok": True,
-                "message": "Агент активен! Создана новая сессия.",
-                "exe_name": game.exe_name,
-                "status": "new_session"
-            }
-        else:
-            active_session_obj.ended_at = now
-            duration_delta = now - active_session_obj.started_at
-            active_session_obj.duration_minutes = int(duration_delta.total_seconds() / 60)
-            session.add(active_session_obj)
-            session.commit()
-            return {
-                "ok": True,
-                "message": "Агент активен! Сессия обновлена.",
-                "exe_name": game.exe_name,
-                "status": "session_updated",
-                "duration_minutes": active_session_obj.duration_minutes
-            }
-    else:
-        new_session = DbSession(
-            game_id=game_id,
-            started_at=now,
-            ended_at=now,
-            source="agent_test",
-            duration_minutes=0
-        )
-        session.add(new_session)
-        session.commit()
-        return {
-            "ok": True,
-            "message": "Агент активен! Создана новая сессия.",
-            "exe_name": game.exe_name,
-            "status": "new_session"
-        }
+    session_obj, status_name = upsert_agent_session(
+        session=session,
+        game_id=game_id,
+        now=now,
+        active_source="agent",
+        new_source="agent_test",
+    )
+    session.commit()
+    return {
+        "ok": True,
+        "message": "Агент активен! Сессия обновлена." if status_name == "session_updated" else "Агент активен! Создана новая сессия.",
+        "exe_name": game.exe_name,
+        "status": status_name,
+        "duration_minutes": session_obj.duration_minutes,
+    }
 
 @app.post("/api/sessions/ping")
 def ping_session(
@@ -656,43 +627,18 @@ def ping_session(
     game = session.get(Game, req.game_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
-    
-    query = select(DbSession).where(
-        DbSession.game_id == req.game_id,
-        DbSession.source == "agent"
-    ).order_by(DbSession.started_at.desc())
-    
-    active_session_obj = session.exec(query).first()
+
+    if game.sync_type != "agent":
+        raise HTTPException(status_code=400, detail="Agent ping is only available for agent games")
+
     now = datetime.utcnow()
-    
-    if active_session_obj:
-        last_ended_at = active_session_obj.ended_at or active_session_obj.started_at
-        diff_minutes = (now - last_ended_at).total_seconds() / 60.0
-        
-        if diff_minutes > 5:
-            new_session = DbSession(
-                game_id=req.game_id,
-                started_at=now,
-                ended_at=now,
-                source="agent",
-                duration_minutes=0
-            )
-            session.add(new_session)
-        else:
-            active_session_obj.ended_at = now
-            duration_delta = now - active_session_obj.started_at
-            active_session_obj.duration_minutes = int(duration_delta.total_seconds() / 60)
-            session.add(active_session_obj)
-    else:
-        new_session = DbSession(
-            game_id=req.game_id,
-            started_at=now,
-            ended_at=now,
-            source="agent",
-            duration_minutes=0
-        )
-        session.add(new_session)
-    
+    upsert_agent_session(
+        session=session,
+        game_id=req.game_id,
+        now=now,
+        active_source="agent",
+        new_source="agent",
+    )
     session.commit()
     return {"ok": True}
 
@@ -720,11 +666,14 @@ def sync_steam(
     game_id: int
 ):
     from steam import fetch_steam_playtime
-    
+
     game = session.get(Game, game_id)
     if not game or game.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Game not found")
-    
+
+    if game.sync_type != "steam":
+        raise HTTPException(status_code=400, detail="Steam sync доступен только для steam-игр")
+
     if not game.steam_app_id:
         game.steam_app_id = 400
         session.add(game)
@@ -811,7 +760,7 @@ def get_agent_games(
     current_user: User = Depends(get_current_user)
 ):
     """Получить список игр пользователя с настройками агента."""
-    query = select(Game).where(Game.user_id == current_user.id)
+    query = select(Game).where(Game.user_id == current_user.id, Game.sync_type == "agent")
     games = session.exec(query).all()
     return [build_game_read(session, game) for game in games]
 
@@ -820,15 +769,23 @@ def configure_agent(
     *,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
-    game_id: int,
-    exe_name: str,
-    enabled: bool = True
+    req: AgentConfigRequest
 ):
     """Настроить отслеживание для игры."""
+    game_id = req.game_id
+    exe_name = req.exe_name.strip()
+    enabled = req.enabled
+
+    if not exe_name:
+        raise HTTPException(status_code=400, detail="exe_name is required")
+
     game = session.get(Game, game_id)
     if not game or game.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Игра не найдена")
-    
+
+    if game.sync_type != "agent":
+        raise HTTPException(status_code=400, detail="Агент можно настроить только для agent-игр")
+
     # Обновляем exe_name в игре
     game.exe_name = exe_name
     session.add(game)
@@ -935,6 +892,9 @@ def update_settings(
     session.commit()
     session.refresh(settings)
     return settings
+
+
+
 
 
 

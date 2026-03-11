@@ -2,7 +2,10 @@ import requests
 
 def run_test():
     try:
-        game_res = requests.post("http://127.0.0.1:8000/api/games", json={"title": "Verification Game", "status": "playing", "source": "manual", "tracking_mode": "manual"})
+        game_res = requests.post(
+            "http://127.0.0.1:8000/api/games",
+            json={"title": "Verification Game", "status": "playing", "sync_type": "steam"}
+        )
         game_id = game_res.json().get("id")
 
         if game_id:

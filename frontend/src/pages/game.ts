@@ -10,6 +10,42 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
     try {
         const game = await api.getGame(gameId);
         const cover = game.cover_url || 'https://via.placeholder.com/300x400/1f2937/4b5563?text=Нет+обложки';
+        const syncTypeLabel = game.sync_type === 'steam' ? 'Steam' : 'Агент';
+        const syncTypeBadgeClass = game.sync_type === 'steam'
+            ? 'bg-sky-500/15 text-sky-300 border border-sky-400/30'
+            : 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30';
+        const achievementsTitle = game.sync_type === 'steam' ? 'Достижения Steam' : 'Синхронизация через агент';
+        const achievementsAction = game.sync_type === 'steam'
+            ? `
+                            <button id="syncSteamBtn" class="bg-gray-700/80 hover:bg-gray-600 text-xs px-3 py-1.5 rounded-lg text-white transition-colors flex items-center gap-1.5 border border-gray-600">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                <span class="hidden sm:inline">Синхронизировать</span>
+                            </button>
+            `
+            : `
+                            <span class="text-xs text-gray-500 bg-gray-900/70 border border-gray-700 rounded-lg px-3 py-1.5">Steam-синк отключен</span>
+            `;
+        const agentPanel = game.sync_type === 'agent'
+            ? `
+                    <div class="bg-gray-800/50 rounded-2xl p-6 border border-gray-700/50">
+                        <div class="flex items-start justify-between gap-4 mb-4">
+                            <div>
+                                <h2 class="text-xl font-bold flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                                    Настройка агента
+                                </h2>
+                                <p class="text-sm text-gray-400 mt-1">Укажите имя процесса для отслеживания этой игры.</p>
+                            </div>
+                            <span class="text-xs text-gray-500 bg-gray-900/70 border border-gray-700 rounded-lg px-3 py-1.5">${game.exe_name ? `EXE: ${game.exe_name}` : 'EXE не задан'}</span>
+                        </div>
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <input id="agentExeNameInput" type="text" value="${game.exe_name || ''}" placeholder="game.exe" class="flex-grow bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all placeholder-gray-500">
+                            <button id="saveAgentConfigBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-3 rounded-xl transition-colors">Сохранить exe</button>
+                            <button id="testAgentBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-3 rounded-xl transition-colors">Проверить агент</button>
+                        </div>
+                    </div>
+            `
+            : '';
         
         container.innerHTML = `
             <!-- Top Hero Banner -->
@@ -35,7 +71,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                                         <span class="bg-blue-600/20 text-blue-400 border border-blue-500/30 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide backdrop-blur-sm">
                                             ${game.status === 'playing' ? 'Играю' : game.status === 'backlog' ? 'Запланировано' : game.status === 'completed' ? 'Пройдено' : game.status}
                                         </span>
-                                        <span class="bg-gray-800/50 text-gray-400 border border-gray-600/50 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide backdrop-blur-sm">${game.source}</span>
+                                        <span class="${syncTypeBadgeClass} text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide backdrop-blur-sm">${syncTypeLabel}</span>
                                     </div>
                                     <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 tracking-tight drop-shadow-lg">${game.title}</h1>
                                 </div>
@@ -62,6 +98,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-12">
                 <!-- Main Content (Left, spans 2) -->
                 <div class="lg:col-span-2 space-y-8">
+                    ${agentPanel}
                     <!-- Progress Section -->
                     <div class="bg-gray-800/50 rounded-2xl p-6 border border-gray-700/50">
                         <div class="flex justify-between items-center mb-6">
@@ -104,12 +141,9 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                         <div class="relative z-10 flex justify-between items-center mb-6">
                             <h3 class="text-xl font-bold text-gray-300 flex items-center gap-2">
                                 <svg class="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
-                                Достижения Steam
+                                ${achievementsTitle}
                             </h3>
-                            <button id="syncSteamBtn" class="bg-gray-700/80 hover:bg-gray-600 text-xs px-3 py-1.5 rounded-lg text-white transition-colors flex items-center gap-1.5 border border-gray-600">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                                <span class="hidden sm:inline">Синхронизировать</span>
-                            </button>
+                            ${achievementsAction}
                         </div>
                         <div id="achievementsContainer" class="relative z-10 grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[300px] pr-2 scrollbar-thin scrollbar-thumb-gray-700">
                             <!-- empty / loaded content -->
@@ -213,11 +247,11 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                 }
 
                 const updatedGame = await api.getGame(gameId);
-                
+
                 const heroEl = document.getElementById('playtimeHero');
                 const mobileEl = document.getElementById('playtimeMobile');
                 const playtimeHours = (updatedGame.total_playtime_minutes / 60).toFixed(1);
-                
+
                 if (heroEl) heroEl.innerText = playtimeHours;
                 if (mobileEl) mobileEl.innerText = `${playtimeHours} ч.`;
 
@@ -227,6 +261,56 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                 alert('Ошибка при синхронизации со Steam. Проверьте настройки API Key и доступ к интернету.');
             } finally {
                 btn.innerHTML = originalHTML;
+            }
+        });
+
+        document.getElementById('saveAgentConfigBtn')?.addEventListener('click', async (e) => {
+            const btn = e.currentTarget as HTMLButtonElement;
+            const input = document.getElementById('agentExeNameInput') as HTMLInputElement;
+            const exeName = input.value.trim();
+
+            if (!exeName) {
+                alert('Введите имя exe-файла.');
+                return;
+            }
+
+            const originalText = btn.textContent;
+            btn.textContent = 'Сохранение...';
+            btn.disabled = true;
+            try {
+                await api.configureAgent(gameId, exeName, true);
+                await renderGamePage(container, gameId);
+            } catch (err: any) {
+                alert(err.message || 'Ошибка настройки агента.');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('testAgentBtn')?.addEventListener('click', async (e) => {
+            const btn = e.currentTarget as HTMLButtonElement;
+            const originalText = btn.textContent;
+            btn.textContent = 'Проверка...';
+            btn.disabled = true;
+
+            try {
+                const result = await api.testAgentPing(gameId);
+                alert(result.message);
+                const updatedGame = await api.getGame(gameId);
+                const heroEl = document.getElementById('playtimeHero');
+                const mobileEl = document.getElementById('playtimeMobile');
+                const playtimeHours = (updatedGame.total_playtime_minutes / 60).toFixed(1);
+
+                if (heroEl) heroEl.innerText = playtimeHours;
+                if (mobileEl) mobileEl.innerText = `${playtimeHours} ч.`;
+
+                await loadHistory(gameId);
+            } catch (err: any) {
+                alert(err.message || 'Ошибка проверки связи с агентом.');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
             }
         });
 
@@ -428,10 +512,18 @@ async function loadNotes(gameId: number) {
 }
 
 async function loadAchievements(gameId: number) {
-    const achievements = await api.getAchievements(gameId);
+    const [game, achievements] = await Promise.all([
+        api.getGame(gameId),
+        api.getAchievements(gameId)
+    ]);
     const container = document.getElementById('achievementsContainer')!;
     container.innerHTML = '';
-    
+
+    if (game.sync_type !== 'steam') {
+        container.innerHTML = '<div class="col-span-2 sm:col-span-3 text-gray-500 text-center py-6 text-sm bg-gray-900/50 rounded-xl border border-gray-800">Для игр через агент Steam-достижения не синхронизируются.</div>';
+        return;
+    }
+
     if (achievements.length === 0) {
         container.innerHTML = '<div class="col-span-2 sm:col-span-3 text-gray-500 text-center py-6 text-sm bg-gray-900/50 rounded-xl border border-gray-800">Достижения не синхронизированы</div>';
         return;
@@ -456,13 +548,16 @@ async function loadAchievements(gameId: number) {
 }
 
 async function updateProgressBar(gameId: number) {
-    const [checklists, achievements] = await Promise.all([
+    const [game, checklists, achievements] = await Promise.all([
+        api.getGame(gameId),
         api.getChecklist(gameId),
         api.getAchievements(gameId)
     ]);
-    
-    const total = checklists.length + achievements.length;
-    const completed = checklists.filter(c => c.completed).length + achievements.filter(a => a.completed).length;
+
+    const achievementTotal = game.sync_type === 'steam' ? achievements.length : 0;
+    const achievementCompleted = game.sync_type === 'steam' ? achievements.filter(a => a.completed).length : 0;
+    const total = checklists.length + achievementTotal;
+    const completed = checklists.filter(c => c.completed).length + achievementCompleted;
     
     const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
     

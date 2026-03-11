@@ -150,7 +150,7 @@ def search_steam_games(query: str) -> List[Dict[str, Any]]:
                     "title": item["name"],
                     "steam_app_id": item["id"],
                     "cover_url": f"https://cdn.akamai.steamstatic.com/steam/apps/{item['id']}/header.jpg",
-                    "source": "steam"
+                    "sync_type": "steam"
                 })
         return results
     except Exception as e:

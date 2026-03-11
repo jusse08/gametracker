@@ -116,11 +116,17 @@ export function mountAddGameModal() {
                         </div>
                         <div>
                             <div class="font-medium text-white group-hover:text-blue-400 transition-colors">${game.title}</div>
+                            <div class="text-xs text-gray-500 mt-1">Как синхронизировать игру после добавления?</div>
                         </div>
                     </div>
-                    <button class="add-btn bg-gray-800 hover:bg-white hover:text-gray-900 border border-gray-600 text-sm font-medium px-4 py-2 rounded-lg transition-all" data-idx="${idx}">
-                        Добавить
-                    </button>
+                    <div class="flex gap-2 shrink-0">
+                        <button class="add-btn bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 text-sm font-medium px-4 py-2 rounded-lg transition-all" data-idx="${idx}" data-sync-type="steam">
+                            Steam
+                        </button>
+                        <button class="add-btn bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-sm font-medium px-4 py-2 rounded-lg transition-all" data-idx="${idx}" data-sync-type="agent">
+                            Агент
+                        </button>
+                    </div>
                 `;
                 resultsBox.appendChild(el);
             });
@@ -128,33 +134,44 @@ export function mountAddGameModal() {
             // Bind add events
             resultsBox.querySelectorAll('.add-btn').forEach(btn => {
                 btn.addEventListener('click', async (btnEv) => {
-                    const idx = parseInt((btnEv.target as HTMLElement).getAttribute('data-idx')!);
+                    const target = btnEv.currentTarget as HTMLButtonElement;
+                    const idx = parseInt(target.getAttribute('data-idx')!);
+                    const syncType = target.getAttribute('data-sync-type') as 'steam' | 'agent';
                     const targetGame = results[idx];
-                    
-                    const btnEl = btnEv.target as HTMLButtonElement;
-                    btnEl.disabled = true;
-                    btnEl.innerHTML = '<div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>';
-                    
+                    const siblingButtons = resultsBox.querySelectorAll(`.add-btn[data-idx="${idx}"]`);
+
+                    siblingButtons.forEach(button => {
+                        (button as HTMLButtonElement).disabled = true;
+                    });
+                    target.innerHTML = '<div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>';
+
                     try {
                         await api.createGame({
                             title: targetGame.title,
-                            source: targetGame.source,
+                            sync_type: syncType,
                             steam_app_id: targetGame.steam_app_id,
                             cover_url: targetGame.cover_url || '',
                             status: 'backlog'
                         });
-                        
-                        btnEl.className = "bg-green-500/20 text-green-400 border border-green-500/50 text-sm font-medium px-4 py-2 rounded-lg transition-all cursor-default";
-                        btnEl.innerHTML = '<svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
-                        
+
+                        siblingButtons.forEach(button => {
+                            const el = button as HTMLButtonElement;
+                            el.disabled = true;
+                            el.className = "bg-green-500/20 text-green-400 border border-green-500/50 text-sm font-medium px-4 py-2 rounded-lg transition-all cursor-default";
+                            el.innerHTML = '<svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+                        });
+
                         // Refetch library if shown
                         if (window.location.hash === '' || window.location.hash === '#library') {
                             window.dispatchEvent(new Event('hashchange'));
                         }
                     } catch(e) {
                          alert('Ошибка добавления');
-                         btnEl.disabled = false;
-                         btnEl.textContent = 'Добавить';
+                         siblingButtons.forEach(button => {
+                            const el = button as HTMLButtonElement;
+                            el.disabled = false;
+                            el.textContent = el.getAttribute('data-sync-type') === 'steam' ? 'Steam' : 'Агент';
+                         });
                     }
                 });
             });
