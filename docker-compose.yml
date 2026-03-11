@@ -40,7 +40,3 @@ services:
 networks:
   gametracker-network:
     driver: bridge
-
-volumes:
-  gametracker_data:
-    driver: local
