@@ -156,18 +156,6 @@ export const api = {
         return handleResponse<User>(res);
     },
 
-    async updateMe(steam_api_key?: string, steam_profile_url?: string): Promise<User> {
-        const params = new URLSearchParams();
-        if (steam_api_key) params.append('steam_api_key', steam_api_key);
-        if (steam_profile_url) params.append('steam_profile_url', steam_profile_url);
-        
-        const res = await fetch(`${API_BASE}/auth/me?${params}`, {
-            method: 'PUT',
-            headers: getAuthHeaders()
-        });
-        return handleResponse<User>(res);
-    },
-
     // --- SETTINGS ---
     async getSettings(): Promise<Settings> {
         const res = await fetch(`${API_BASE}/settings`, { headers: getAuthHeaders() });
@@ -365,3 +353,4 @@ export const api = {
         return handleResponse(res);
     }
 };
+

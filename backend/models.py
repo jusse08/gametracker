@@ -19,10 +19,6 @@ class UserCreate(SQLModel):
     username: str
     password: str
 
-class UserLogin(SQLModel):
-    username: str
-    password: str
-
 class UserRead(SQLModel):
     id: int
     username: str
@@ -191,3 +187,4 @@ class GameUpdate(SQLModel):
     description: Optional[str] = None
     exe_name: Optional[str] = None
     tracking_mode: Optional[str] = None
+

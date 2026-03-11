@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Response
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
@@ -6,7 +6,6 @@ from typing import List, Optional
 from datetime import timedelta, datetime
 import os
 from dotenv import load_dotenv
-import requests
 
 load_dotenv()
 
@@ -14,7 +13,7 @@ from database import create_db_and_tables, get_session
 from scraper import parse_wiki_missions
 from steam import sync_steam_achievements, search_steam_games
 from models import (
-    User, UserCreate, UserRead, UserLogin,
+    User, UserCreate, UserRead,
     Game, GameCreate, GameRead, GameUpdate,
     Note, NoteCreate, NoteRead,
     ChecklistItem, ChecklistItemCreate, ChecklistItemRead,
@@ -71,6 +70,65 @@ def enrich_user_read(user: User) -> UserRead:
     user_read = UserRead.model_validate(user)
     user_read.is_superadmin = is_superadmin(user)
     return user_read
+
+def ensure_owned_game(session: Session, current_user: User, game_id: int) -> Game:
+    game = session.get(Game, game_id)
+    if not game or game.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Game not found")
+    return game
+
+def get_total_playtime_minutes(session: Session, game_id: int) -> int:
+    playtime_query = select(DbSession.duration_minutes).where(DbSession.game_id == game_id)
+    return sum(session.exec(playtime_query) or [0])
+
+def build_game_read(session: Session, game: Game) -> GameRead:
+    game_read = GameRead.model_validate(game)
+    game_read.total_playtime_minutes = get_total_playtime_minutes(session, game.id)
+    return game_read
+
+def upsert_agent_session(
+    session: Session,
+    game_id: int,
+    now: datetime,
+    active_source: str,
+    new_source: str
+):
+    query = select(DbSession).where(
+        DbSession.game_id == game_id,
+        DbSession.source == active_source
+    ).order_by(DbSession.started_at.desc())
+    active_session_obj = session.exec(query).first()
+
+    if not active_session_obj:
+        new_session = DbSession(
+            game_id=game_id,
+            started_at=now,
+            ended_at=now,
+            source=new_source,
+            duration_minutes=0
+        )
+        session.add(new_session)
+        return new_session, "new_session"
+
+    last_ended_at = active_session_obj.ended_at or active_session_obj.started_at
+    diff_minutes = (now - last_ended_at).total_seconds() / 60.0
+
+    if diff_minutes > 5:
+        new_session = DbSession(
+            game_id=game_id,
+            started_at=now,
+            ended_at=now,
+            source=new_source,
+            duration_minutes=0
+        )
+        session.add(new_session)
+        return new_session, "new_session"
+
+    active_session_obj.ended_at = now
+    duration_delta = now - active_session_obj.started_at
+    active_session_obj.duration_minutes = int(duration_delta.total_seconds() / 60)
+    session.add(active_session_obj)
+    return active_session_obj, "session_updated"
 
 @app.get("/api/users", response_model=List[UserRead])
 def read_users(
@@ -184,17 +242,7 @@ def read_games(
         query = query.where(Game.status == status)
     
     games = session.exec(query).all()
-    
-    result = []
-    for game in games:
-        playtime_query = select(DbSession.duration_minutes).where(DbSession.game_id == game.id)
-        total_minutes = sum(session.exec(playtime_query) or [0])
-        
-        game_read = GameRead.model_validate(game)
-        game_read.total_playtime_minutes = total_minutes
-        result.append(game_read)
-    
-    return result
+    return [build_game_read(session, game) for game in games]
 
 @app.get("/api/games/{game_id}", response_model=GameRead)
 def read_game(
@@ -761,26 +809,7 @@ def get_agent_games(
     """Получить список игр пользователя с настройками агента."""
     query = select(Game).where(Game.user_id == current_user.id)
     games = session.exec(query).all()
-    
-    result = []
-    for game in games:
-        config_query = select(AgentConfig).where(AgentConfig.game_id == game.id)
-        config = session.exec(config_query).first()
-        
-        playtime_query = select(DbSession.duration_minutes).where(DbSession.game_id == game.id)
-        total_minutes = sum(session.exec(playtime_query) or [0])
-        
-        game_read = GameRead.model_validate(game)
-        game_read.total_playtime_minutes = total_minutes
-        game_read.exe_name = game.exe_name
-        
-        if config:
-            game_read = GameRead.model_validate(game)
-            game_read.total_playtime_minutes = total_minutes
-        
-        result.append(game_read)
-    
-    return result
+    return [build_game_read(session, game) for game in games]
 
 @app.post("/api/agent/configure", response_model=AgentConfigRead)
 def configure_agent(
@@ -902,3 +931,8 @@ def update_settings(
     session.commit()
     session.refresh(settings)
     return settings
+
+
+
+
+
