@@ -29,6 +29,10 @@ from auth import (
 
 app = FastAPI(title="GameTracker API")
 
+@app.get("/health")
+def healthcheck():
+    return {"ok": True}
+
 # CORS configuration from environment
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173").split(",")
 
@@ -931,6 +935,7 @@ def update_settings(
     session.commit()
     session.refresh(settings)
     return settings
+
 
 
 
