@@ -43,10 +43,19 @@ async function openQuestActionsModal(gameId: number, onDataChanged: () => Promis
     });
 
     const closeModal = () => {
+        window.removeEventListener('keydown', onKeyDown);
         overlay.classList.remove('is-open');
         modal.classList.remove('is-open');
         setTimeout(() => overlay.remove(), 240);
     };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            closeModal();
+        }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
 
     const renderBody = () => {
         const hasCategories = categories.length > 0;
@@ -256,10 +265,19 @@ async function openAgentSettingsModal(
     });
 
     const closeModal = () => {
+        window.removeEventListener('keydown', onKeyDown);
         overlay.classList.remove('is-open');
         modal.classList.remove('is-open');
         setTimeout(() => overlay.remove(), 240);
     };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            closeModal();
+        }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
 
     modal.innerHTML = `
         <div class="gt-modal-header">
@@ -370,7 +388,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             ? `
                             <button id="syncSteamManualBtn" class="bg-gray-700/80 hover:bg-gray-600 text-xs px-3 py-1.5 rounded-lg text-white transition-colors flex items-center gap-1.5 border border-gray-600">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                                <span class="hidden sm:inline">Ручная синхронизация Steam</span>
+                                <span class="hidden sm:inline">Синхронизация Steam</span>
                             </button>
             `
             : '';
@@ -623,6 +641,12 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             btn.innerHTML = 'Синхронизация...';
             btn.disabled = true;
             try {
+                const settings = await api.getSettings();
+                if (!settings.steam_api_key || !settings.steam_user_id) {
+                    showNotification('Сначала настройте Steam API Key и профиль в Настройках.', 'info');
+                    return;
+                }
+
                 const result = await api.syncSteamManual(gameId);
                 await refreshPlaytimeAndHistory();
                 if (result.added_minutes > 0) {
@@ -631,7 +655,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                     showNotification('Новых минут в Steam не найдено', 'info');
                 }
             } catch (err) {
-                showNotification('Ошибка ручной синхронизации Steam.', 'error');
+                showNotification('Ошибка синхронизации Steam.', 'error');
             } finally {
                 btn.innerHTML = originalHTML;
                 btn.disabled = false;
@@ -925,7 +949,7 @@ async function loadNotes(gameId: number) {
 
     if (notes.length === 0) {
          container.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full text-gray-500 opacity-70 mt-8">
+            <div class="flex flex-col items-center justify-center h-full text-gray-500 opacity-70">
                 <svg class="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                 <span class="text-sm">Нет записей</span>
             </div>
@@ -971,7 +995,7 @@ async function loadNotes(gameId: number) {
     } catch (err) {
         console.error('Failed to load notes:', err);
         container.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full text-red-400 opacity-70 mt-8">
+            <div class="flex flex-col items-center justify-center h-full text-red-400 opacity-70">
                 <svg class="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                 <span class="text-sm">Ошибка загрузки заметок</span>
             </div>
@@ -1080,7 +1104,7 @@ async function loadHistory(gameId: number) {
                 <div>
                     <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">${date} <span class="text-gray-600 ml-1 opacity-50 font-normal lowercase">${time}</span></div>
                     <div class="text-xs text-gray-200 font-medium">
-                        ${isSteamManual ? 'Ручная синхронизация Steam' : (isAgent ? 'Сессия через агент' : `Сессия (${session.source})`)}
+                        ${isSteamManual ? 'Синхронизация Steam' : (isAgent ? 'Сессия через агент' : `Сессия (${session.source})`)}
                     </div>
                 </div>
             </div>

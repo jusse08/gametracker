@@ -25,13 +25,27 @@ function compareGames(a: Game, b: Game, sortBy: string): number {
 }
 
 export async function renderLibrary(container: HTMLElement) {
+    let username = 'Игрок';
+    try {
+        const me = await api.getMe();
+        if (me.username?.trim()) {
+            username = me.username.trim();
+        }
+    } catch {
+        // Keep fallback username when profile fetch fails.
+    }
+
     container.innerHTML = `
         <div class="gt-page-flow gt-page-flow-lg">
             <section class="gt-panel gt-section-pad overflow-hidden relative">
+                <button id="heroLogoutBtn" class="gt-btn absolute top-4 right-4 z-20 text-rose-100 border-rose-300/45 bg-rose-300/14 hover:bg-rose-300/24">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    Выйти
+                </button>
                 <div class="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                     <div class="max-w-3xl gt-stack-md">
                         <span class="gt-chip inline-flex">Командный центр</span>
-                        <h1 class="text-3xl md:text-5xl font-bold leading-tight tracking-tight">Аркадный ангар<br class="hidden sm:block"> вашей библиотеки</h1>
+                        <h1 class="text-3xl md:text-5xl font-bold leading-tight tracking-tight">Привет, ${username}!</h1>
                         <p class="text-slate-300/90 text-sm md:text-base max-w-2xl">Перетаскивай карточки между статусами, следи за прогрессом и прокачивай профиль игровыми сессиями.</p>
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto" id="statsDock">
@@ -97,6 +111,7 @@ export async function renderLibrary(container: HTMLElement) {
     const sortButton = container.querySelector<HTMLButtonElement>('#librarySortBtn')!;
     const sortLabel = container.querySelector<HTMLElement>('#librarySortLabel')!;
     const sortOptions = Array.from(container.querySelectorAll<HTMLButtonElement>('.library-sort-option'));
+    const logoutBtn = container.querySelector<HTMLButtonElement>('#heroLogoutBtn');
 
     let dragMirror: HTMLElement | null = null;
     let gamesByStatus: Game[] = [];
@@ -118,6 +133,11 @@ export async function renderLibrary(container: HTMLElement) {
     const transparentImage = new Image();
     transparentImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
+    logoutBtn?.addEventListener('click', () => {
+        api.logout();
+        window.location.hash = '#auth';
+    });
+
     const onGlobalDragOver = (e: DragEvent) => {
         e.preventDefault();
         if (e.dataTransfer) {
@@ -127,6 +147,15 @@ export async function renderLibrary(container: HTMLElement) {
             dragMirror.style.left = `${e.clientX}px`;
             dragMirror.style.top = `${e.clientY}px`;
         }
+    };
+
+    const toggleDropZoneHints = (enabled: boolean) => {
+        container.querySelectorAll('.status-tab').forEach((el) => {
+            const tab = el as HTMLElement;
+            const tabStatus = tab.getAttribute('data-status');
+            if (!tabStatus || tabStatus === currentStatus) return;
+            tab.classList.toggle('drop-available', enabled);
+        });
     };
 
     async function loadGames() {
@@ -305,6 +334,7 @@ export async function renderLibrary(container: HTMLElement) {
 
                 card.classList.add('dragging');
                 grid.classList.add('games-grid-dragging');
+                toggleDropZoneHints(true);
                 window.addEventListener('dragover', onGlobalDragOver);
             });
 
@@ -316,6 +346,7 @@ export async function renderLibrary(container: HTMLElement) {
                     dragMirror = null;
                 }
                 window.removeEventListener('dragover', onGlobalDragOver);
+                toggleDropZoneHints(false);
                 document.querySelectorAll('.status-tab').forEach((b) => b.classList.remove('drop-target'));
             });
 
@@ -328,7 +359,7 @@ export async function renderLibrary(container: HTMLElement) {
                         <h3 class="font-bold text-white leading-tight line-clamp-2">${game.title}</h3>
                     </div>
                 </div>
-                <div class="p-3 flex-grow flex flex-col gap-3 pointer-events-none">
+                <div class="p-3 -mt-px flex-grow flex flex-col gap-3 pointer-events-none">
                     <div class="flex items-center justify-between text-xs text-slate-300/80">
                         <span>Наиграно</span>
                         <span class="font-semibold text-cyan-200">${formatPlaytime(game.total_playtime_minutes)}</span>

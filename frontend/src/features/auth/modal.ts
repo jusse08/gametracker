@@ -45,6 +45,21 @@ export function mountAuthModal() {
         modal.classList.add('is-open');
     });
 
+    const closeModal = () => {
+        window.removeEventListener('keydown', onKeyDown);
+        overlay.classList.remove('is-open');
+        modal.classList.remove('is-open');
+        setTimeout(() => overlay.remove(), 240);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            closeModal();
+        }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+
     document.getElementById('loginForm')!.addEventListener('submit', async (e) => {
         e.preventDefault();
         const usernameInput = document.getElementById('loginUsername') as HTMLInputElement;
@@ -71,7 +86,7 @@ export function mountAuthModal() {
         try {
             await api.login(username, password);
             showNotification('Успешный вход!', 'success');
-            overlay.remove();
+            closeModal();
             window.location.hash = '#library';
             window.location.reload();
         } catch (err: any) {

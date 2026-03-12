@@ -140,6 +140,15 @@ export const api = {
         return handleResponse<User>(res);
     },
 
+    async adminUpdateUserPassword(userId: number, password: string): Promise<{ ok: boolean }> {
+        const res = await fetch(`${API_BASE}/users/${userId}/password`, {
+            method: 'PUT',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+        return handleResponse<{ ok: boolean }>(res);
+    },
+
     async login(username: string, password: string): Promise<{ access_token: string, token_type: string, user: User }> {
         const formData = new FormData();
         formData.append('username', username);

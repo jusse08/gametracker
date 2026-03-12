@@ -108,27 +108,19 @@ export function hideLoading() {
 
 // Load user info and update navbar
 export async function loadUserInfo() {
-    const userInfo = document.getElementById('userInfo');
-    const usernameDisplay = document.getElementById('usernameDisplay');
     const adminBtn = document.getElementById('adminBtn');
     
-    if (userInfo && usernameDisplay && isLoggedIn()) {
+    if (isLoggedIn()) {
         try {
             const user = await api.getMe();
-            usernameDisplay.textContent = user.username;
-            userInfo.classList.remove('hidden');
-            userInfo.classList.add('inline-flex');
             
             if (user.is_superadmin && adminBtn) {
                 adminBtn.classList.remove('hidden');
                 adminBtn.classList.add('inline-flex');
+            } else if (adminBtn) {
+                adminBtn.classList.add('hidden');
+                adminBtn.classList.remove('inline-flex');
             }
-            
-            // Logout handler
-            document.getElementById('logoutBtn')?.addEventListener('click', () => {
-                api.logout();
-                window.location.hash = '#auth';
-            });
         } catch (e) {
             // Token invalid
             api.logout();

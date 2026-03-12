@@ -16,7 +16,10 @@ export function mountAddGameModal() {
     modal.innerHTML = `
         <div class="gt-modal-header">
             <div>
-                <h2 class="gt-modal-title text-2xl">Добавить игру</h2>
+                <h2 class="gt-modal-title text-2xl">
+                    <svg class="w-5 h-5 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    Добавить игру
+                </h2>
                 <p class="text-sm text-slate-300/80 mt-1">Поиск по базе Steam</p>
             </div>
             <button id="closeModal" class="gt-modal-close">
@@ -62,10 +65,19 @@ export function mountAddGameModal() {
     });
 
     const closeModal = () => {
+        window.removeEventListener('keydown', onKeyDown);
         overlay.classList.remove('is-open');
         modal.classList.remove('is-open');
         setTimeout(() => root.innerHTML = '', 240);
     };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            closeModal();
+        }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
 
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) closeModal();

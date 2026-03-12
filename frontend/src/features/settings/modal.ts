@@ -12,10 +12,10 @@ export async function mountSettingsModal() {
     overlay.id = "settingsModal";
 
     const panel = document.createElement('div');
-    panel.className = "gt-panel gt-modal-panel w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto";
+    panel.className = "gt-panel gt-modal-panel w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col";
 
     panel.innerHTML = `
-            <div class="gt-modal-header sticky">
+            <div class="gt-modal-header">
                 <h2 class="gt-modal-title">
                     <svg class="w-6 h-6 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     Настройки
@@ -25,7 +25,7 @@ export async function mountSettingsModal() {
                 </button>
             </div>
 
-            <div class="gt-modal-section gt-stack-md">
+            <div class="gt-modal-section gt-stack-md overflow-y-auto flex-grow min-h-0">
                 <!-- Steam Settings -->
                 <section class="gt-stack-md">
                     <h3 class="text-lg font-semibold text-white flex items-center gap-2">
@@ -89,10 +89,19 @@ export async function mountSettingsModal() {
 
     // Bindings
     const close = () => {
+        window.removeEventListener('keydown', onKeyDown);
         overlay.classList.remove('is-open');
         panel.classList.remove('is-open');
         setTimeout(() => overlay.remove(), 240);
     };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            close();
+        }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
 
     document.getElementById('closeSettingsBtn')?.addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });

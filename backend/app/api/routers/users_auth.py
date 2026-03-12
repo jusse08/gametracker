@@ -13,7 +13,7 @@ from app.core.auth import (
     verify_password,
 )
 from app.core.database import get_session
-from app.domain.models import User, UserCreate, UserRead
+from app.domain.models import User, UserCreate, UserPasswordUpdate, UserRead
 from app.services.common import enrich_user_read, is_superadmin
 
 router = APIRouter()
@@ -51,6 +51,28 @@ def create_user(
     session.commit()
     session.refresh(user)
     return enrich_user_read(user)
+
+
+@router.put("/api/users/{user_id}/password")
+def update_user_password(
+    user_id: int,
+    password_data: UserPasswordUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if not is_superadmin(current_user):
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if is_superadmin(user):
+        raise HTTPException(status_code=400, detail="Cannot change superadmin password here")
+
+    user.hashed_password = get_password_hash(password_data.password)
+    session.add(user)
+    session.commit()
+    return {"ok": True}
 
 
 @router.post("/api/auth/login")

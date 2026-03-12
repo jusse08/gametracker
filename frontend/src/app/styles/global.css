@@ -186,6 +186,48 @@ body::after {
     line-height: 1;
 }
 
+.gt-user-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-main);
+    min-height: 43px;
+}
+
+.gt-logout-btn {
+    border: 0;
+    background: transparent;
+    color: rgba(255, 194, 206, 0.9);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0;
+    font-family: "Exo 2", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: color 0.2s ease;
+}
+
+.gt-logout-btn:hover {
+    color: #ffd8e1;
+}
+
+.gt-username-caps {
+    font-family: "Exo 2", sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(225, 241, 255, 0.96);
+}
+
+.gt-toolbar-sep {
+    width: 1px;
+    height: 24px;
+    background: linear-gradient(180deg, rgba(130, 150, 189, 0), rgba(130, 150, 189, 0.75), rgba(130, 150, 189, 0));
+    opacity: 0.9;
+}
+
 .gt-btn,
 .gt-link {
     border: 1px solid var(--line-soft);
@@ -205,7 +247,8 @@ body::after {
 
 .gt-toolbar > .gt-btn,
 .gt-toolbar > .gt-link,
-.gt-toolbar > .gt-user {
+.gt-toolbar > .gt-user,
+.gt-toolbar > .gt-user-inline {
     height: 43px;
     padding-top: 0;
     padding-bottom: 0;
@@ -925,6 +968,14 @@ body::after {
     box-shadow: 0 10px 26px rgba(20, 212, 255, 0.3);
 }
 
+.drop-available {
+    border-color: rgba(20, 212, 255, 0.38) !important;
+    color: rgba(196, 244, 255, 0.96) !important;
+    background: rgba(20, 212, 255, 0.12) !important;
+    box-shadow: inset 0 0 0 1px rgba(20, 212, 255, 0.12), 0 0 0 1px rgba(20, 212, 255, 0.1);
+    animation: drop-zone-pulse 1.3s ease-in-out infinite;
+}
+
 .status-tab {
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1085,6 +1136,16 @@ body::after {
     }
 }
 
+@keyframes drop-zone-pulse {
+    0%,
+    100% {
+        box-shadow: inset 0 0 0 1px rgba(20, 212, 255, 0.12), 0 0 0 1px rgba(20, 212, 255, 0.1);
+    }
+    50% {
+        box-shadow: inset 0 0 0 1px rgba(20, 212, 255, 0.22), 0 0 0 1px rgba(20, 212, 255, 0.2), 0 6px 18px rgba(20, 212, 255, 0.16);
+    }
+}
+
 @keyframes notification-slide-out {
     from {
         transform: translateX(0);
@@ -1211,13 +1272,22 @@ body,
 
     .gt-toolbar > .gt-btn,
     .gt-toolbar > .gt-link,
-    .gt-toolbar > .gt-user {
+    .gt-toolbar > .gt-user,
+    .gt-toolbar > .gt-user-inline {
         height: 38px;
     }
 
     .gt-user {
         padding: 0 0.74rem;
         font-size: 0.85rem;
+    }
+
+    .gt-user-inline {
+        min-height: 38px;
+    }
+
+    .gt-toolbar-sep {
+        height: 20px;
     }
 
     .gt-page-flow {

@@ -21,6 +21,9 @@ class UserCreate(SQLModel):
     username: str
     password: str
 
+class UserPasswordUpdate(SQLModel):
+    password: str = Field(min_length=6, max_length=255)
+
 class UserRead(SQLModel):
     id: int
     username: str
