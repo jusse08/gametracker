@@ -21,10 +21,10 @@ export async function mountAdminModal() {
             </button>
         </div>
 
-        <div class="p-6 overflow-y-auto space-y-6">
+        <div class="gt-modal-section overflow-y-auto gt-stack-md">
             <!-- Create User Form -->
-            <div class="gt-panel rounded-xl p-5">
-                <h3 class="text-sm font-bold text-slate-300/80 uppercase tracking-widest mb-4">Создать пользователя</h3>
+            <div class="gt-panel rounded-xl p-5 gt-stack-md">
+                <h3 class="text-sm font-bold text-slate-300/80 uppercase tracking-widest">Создать пользователя</h3>
                 <form id="createUserForm" class="flex gap-4 items-end" novalidate>
                     <div class="flex-1">
                         <label class="gt-label mb-1">Имя пользователя</label>
@@ -41,8 +41,8 @@ export async function mountAdminModal() {
             </div>
 
             <!-- Users List -->
-            <div>
-                <h3 class="text-sm font-bold text-slate-300/80 uppercase tracking-widest mb-4">Список пользователей</h3>
+            <div class="gt-stack-md">
+                <h3 class="text-sm font-bold text-slate-300/80 uppercase tracking-widest">Список пользователей</h3>
                 <div class="gt-table-shell">
                     <table class="gt-table font-mono">
                         <thead>

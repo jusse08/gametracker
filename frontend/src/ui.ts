@@ -72,8 +72,8 @@ export function showConfirmDialog(options: ConfirmDialogOptions): Promise<boolea
         <div class="gt-modal-header">
             <h3 id="confirmDialogTitle" class="gt-modal-title text-lg"></h3>
         </div>
-        <div id="confirmDialogMessage" class="p-5 text-sm text-slate-200/90 leading-relaxed"></div>
-        <div class="p-5 pt-0 flex justify-end gap-2">
+        <div id="confirmDialogMessage" class="gt-modal-section text-sm text-slate-200/90 leading-relaxed"></div>
+        <div class="gt-modal-actions flex justify-end gap-2">
             <button type="button" class="gt-btn gt-btn-secondary">${cancelText}</button>
             <button type="button" class="gt-btn ${confirmBtnClass}">${confirmText}</button>
         </div>
@@ -147,11 +147,11 @@ export function showInputDialog(options: InputDialogOptions): Promise<string | n
         <div class="gt-modal-header">
             <h3 id="inputDialogTitle" class="gt-modal-title text-lg"></h3>
         </div>
-        <div class="p-5 space-y-3">
+        <div class="gt-modal-section gt-stack-sm">
             <p id="inputDialogMessage" class="text-sm text-slate-200/90 leading-relaxed"></p>
             <input id="inputDialogField" type="text" class="gt-input text-sm" />
         </div>
-        <div class="p-5 pt-0 flex justify-end gap-2">
+        <div class="gt-modal-actions flex justify-end gap-2">
             <button type="button" class="gt-btn gt-btn-secondary">${cancelText}</button>
             <button type="button" class="gt-btn gt-btn-primary">${confirmText}</button>
         </div>

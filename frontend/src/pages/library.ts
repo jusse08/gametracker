@@ -26,27 +26,28 @@ function compareGames(a: Game, b: Game, sortBy: string): number {
 
 export async function renderLibrary(container: HTMLElement) {
     container.innerHTML = `
-        <section class="gt-panel p-5 md:p-7 mb-6 overflow-hidden relative">
-            <div class="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                <div class="max-w-3xl">
-                    <span class="gt-chip inline-flex mb-4">Командный центр</span>
-                    <h1 class="text-3xl md:text-5xl font-bold leading-tight tracking-tight mb-3">Аркадный ангар<br class="hidden sm:block"> вашей библиотеки</h1>
-                    <p class="text-slate-300/90 text-sm md:text-base max-w-2xl">Перетаскивай карточки между статусами, следи за прогрессом и прокачивай профиль игровыми сессиями.</p>
+        <div class="gt-page-flow gt-page-flow-lg">
+            <section class="gt-panel gt-section-pad overflow-hidden relative">
+                <div class="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                    <div class="max-w-3xl gt-stack-md">
+                        <span class="gt-chip inline-flex">Командный центр</span>
+                        <h1 class="text-3xl md:text-5xl font-bold leading-tight tracking-tight">Аркадный ангар<br class="hidden sm:block"> вашей библиотеки</h1>
+                        <p class="text-slate-300/90 text-sm md:text-base max-w-2xl">Перетаскивай карточки между статусами, следи за прогрессом и прокачивай профиль игровыми сессиями.</p>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto" id="statsDock">
+                        <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Всего игр</p><p id="statTotal" class="text-2xl font-bold">-</p></div>
+                        <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Играю</p><p id="statPlaying" class="text-2xl font-bold text-cyan-300">-</p></div>
+                        <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Пройдено</p><p id="statCompleted" class="text-2xl font-bold text-lime-300">-</p></div>
+                        <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Часов</p><p id="statHours" class="text-2xl font-bold text-amber-300">-</p></div>
+                    </div>
                 </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto" id="statsDock">
-                    <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Всего игр</p><p id="statTotal" class="text-2xl font-bold">-</p></div>
-                    <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Играю</p><p id="statPlaying" class="text-2xl font-bold text-cyan-300">-</p></div>
-                    <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Пройдено</p><p id="statCompleted" class="text-2xl font-bold text-lime-300">-</p></div>
-                    <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Часов</p><p id="statHours" class="text-2xl font-bold text-amber-300">-</p></div>
-                </div>
-            </div>
-        </section>
+            </section>
 
-        <section class="gt-panel library-status-shell mb-4 p-3 md:p-4">
-            <div class="library-status-header">
-                <p class="library-status-title">Раздел библиотеки</p>
-                <p class="library-status-subtitle">Переключение активного статуса</p>
-            </div>
+            <section class="gt-panel library-status-shell gt-section-pad-sm">
+                <div class="library-status-header">
+                    <p class="library-status-title">Раздел библиотеки</p>
+                    <p class="library-status-subtitle">Переключение активного статуса</p>
+                </div>
                 <div class="library-status-tabs">
                     <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold bg-cyan-500/20 text-cyan-200 border border-cyan-400/30 active-tab" data-status="playing">Играю</button>
                     <button class="status-tab library-status-tab px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-700/60 border border-transparent" data-status="backlog">Запланировано</button>
@@ -55,8 +56,8 @@ export async function renderLibrary(container: HTMLElement) {
                 </div>
             </section>
 
-        <section class="mb-5">
-            <div class="gt-panel p-4 library-filters">
+            <section>
+                <div class="gt-panel gt-section-pad-sm library-filters">
                 <div class="relative library-search-wrap">
                     <input id="librarySearch" class="gt-input pr-9" type="text" placeholder="Быстрый поиск по библиотеке...">
                     <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
@@ -81,10 +82,10 @@ export async function renderLibrary(container: HTMLElement) {
                         <button class="library-sort-option" type="button" role="option" aria-selected="false" data-value="title-desc">По названию (Я-А)</button>
                     </div>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <section id="gamesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 lg:gap-5 relative min-h-[420px]"></section>
+            <section id="gamesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 lg:gap-5 relative min-h-[420px]"></section>
+        </div>
     `;
 
     const grid = container.querySelector<HTMLElement>('#gamesGrid')!;
@@ -266,8 +267,8 @@ export async function renderLibrary(container: HTMLElement) {
                 : 'Здесь пока пусто. Добавьте первую игру.';
             grid.innerHTML = `
                 <div class="col-span-full gt-panel px-6 py-16 text-center">
-                    <p class="text-xl font-semibold mb-2 text-slate-100">${emptyMessage}</p>
-                    <p class="text-slate-400 text-sm mb-5">Создайте карточку игры и распределите ее по статусам.</p>
+                    <p class="text-xl font-semibold mb-3 text-slate-100">${emptyMessage}</p>
+                    <p class="text-slate-400 text-sm mb-6">Создайте карточку игры и распределите ее по статусам.</p>
                     <button onclick="document.getElementById('addGameBtn')?.click()" class="gt-btn gt-btn-primary">Добавить игру</button>
                 </div>
             `;

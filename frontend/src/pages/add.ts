@@ -24,7 +24,7 @@ export function mountAddGameModal() {
             </button>
         </div>
         
-        <div class="p-6 border-b border-slate-600/45 bg-slate-900/35">
+        <div class="gt-modal-section border-b border-slate-600/45 bg-slate-900/35">
             <form id="searchForm" class="flex gap-3" novalidate>
                 <div class="relative flex-grow group">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-cyan-300 transition-colors">
@@ -38,10 +38,10 @@ export function mountAddGameModal() {
             </form>
         </div>
         
-        <div class="flex-grow overflow-y-auto p-6 bg-slate-900/35">
-            <h3 class="text-xs font-bold text-slate-300/75 uppercase tracking-wider mb-4 border-b border-slate-600/45 pb-2">Результаты поиска</h3>
+        <div class="flex-grow overflow-y-auto gt-modal-section bg-slate-900/35 gt-stack-md">
+            <h3 class="text-xs font-bold text-slate-300/75 uppercase tracking-wider border-b border-slate-600/45 pb-2">Результаты поиска</h3>
             <div id="searchResults" class="space-y-3">
-                <div class="text-center py-10 text-slate-400">
+                <div class="text-center py-8 text-slate-400">
                     <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-900/60 mb-4 border border-slate-600/45">
                         <svg class="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
@@ -96,7 +96,7 @@ export function mountAddGameModal() {
         
         // Show loading state
         resultsBox.innerHTML = `
-            <div class="flex items-center justify-center py-10">
+            <div class="flex items-center justify-center py-8">
                 <div class="w-8 h-8 border-3 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
                 <span class="ml-3 text-gray-400">Поиск в базах данных...</span>
             </div>

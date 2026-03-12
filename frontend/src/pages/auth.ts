@@ -14,15 +14,15 @@ export function mountAuthModal() {
     modal.className = "gt-panel gt-modal-panel rounded-2xl w-full max-w-md shadow-2xl overflow-hidden";
 
     modal.innerHTML = `
-        <div class="p-8 relative">
-            <div class="text-center mb-8">
-                <span class="gt-chip inline-flex mb-3">Secure Access</span>
-                <h1 class="text-3xl font-bold mb-2">GameTracker</h1>
+        <div class="gt-modal-section relative">
+            <div class="text-center gt-stack-sm">
+                <span class="gt-chip inline-flex">Secure Access</span>
+                <h1 class="text-3xl font-bold">GameTracker</h1>
                 <p class="text-slate-300/80">Вход в систему</p>
             </div>
 
             <!-- Login Form -->
-            <form id="loginForm" class="space-y-4" novalidate>
+            <form id="loginForm" class="gt-stack-md mt-6" novalidate>
                 <div>
                     <label class="gt-label">Имя пользователя</label>
                     <input type="text" id="loginUsername" class="gt-input" required>
