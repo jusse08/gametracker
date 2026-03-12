@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
 class PingRequest(BaseModel):
@@ -26,3 +26,17 @@ class AgentLaunchAckRequest(BaseModel):
     request_id: str
     success: bool
     error: Optional[str] = None
+
+
+class GameFactResponse(BaseModel):
+    text: str
+    game_title: str
+    source: str = "fandom"
+
+
+class FactsRebuildRequest(BaseModel):
+    page_url: Optional[str] = None
+    game: Optional[str] = None
+    seed_urls: Optional[List[str]] = None
+    per_seed_limit: int = 60
+    max_facts: int = 600

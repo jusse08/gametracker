@@ -9,6 +9,7 @@ from app.core.database import create_db_and_tables, engine
 from app.core.auth import get_password_hash
 from app.domain.models import Settings, User
 from app.api.routers.agent import router as agent_router
+from app.api.routers.facts import router as facts_router
 from app.api.routers.games import router as games_router
 from app.api.routers.settings import router as settings_router
 from app.api.routers.users_auth import router as users_auth_router
@@ -62,5 +63,6 @@ def on_startup():
 
 app.include_router(users_auth_router)
 app.include_router(games_router)
+app.include_router(facts_router)
 app.include_router(agent_router)
 app.include_router(settings_router)

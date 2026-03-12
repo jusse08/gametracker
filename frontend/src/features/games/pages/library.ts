@@ -46,7 +46,7 @@ export async function renderLibrary(container: HTMLElement) {
                     <div class="max-w-3xl gt-stack-md">
                         <span class="gt-chip inline-flex">Командный центр</span>
                         <h1 class="text-3xl md:text-5xl font-bold leading-tight tracking-tight">Привет, ${username}!</h1>
-                        <p class="text-slate-300/90 text-sm md:text-base max-w-2xl">Перетаскивай карточки между статусами, следи за прогрессом и прокачивай профиль игровыми сессиями.</p>
+                        <p id="heroGameFact" class="text-slate-300/90 text-sm md:text-base max-w-2xl">Загружаем интересный факт об играх...</p>
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto" id="statsDock">
                         <div class="gt-panel p-3 min-w-[120px]"><p class="text-xs text-slate-300/70 uppercase tracking-wide">Всего игр</p><p id="statTotal" class="text-2xl font-bold">-</p></div>
@@ -112,6 +112,7 @@ export async function renderLibrary(container: HTMLElement) {
     const sortLabel = container.querySelector<HTMLElement>('#librarySortLabel')!;
     const sortOptions = Array.from(container.querySelectorAll<HTMLButtonElement>('.library-sort-option'));
     const logoutBtn = container.querySelector<HTMLButtonElement>('#heroLogoutBtn');
+    const factText = container.querySelector<HTMLElement>('#heroGameFact');
 
     let dragMirror: HTMLElement | null = null;
     let gamesByStatus: Game[] = [];
@@ -137,6 +138,17 @@ export async function renderLibrary(container: HTMLElement) {
         api.logout();
         window.location.hash = '#auth';
     });
+
+    async function loadHeroFact() {
+        if (!factText) return;
+        factText.textContent = 'Загружаем интересный факт об играх...';
+        try {
+            const fact = await api.getRandomGameFact();
+            factText.textContent = fact.text;
+        } catch {
+            factText.textContent = 'Факты пока недоступны. Сначала собери JSON через /api/facts/rebuild.';
+        }
+    }
 
     const onGlobalDragOver = (e: DragEvent) => {
         e.preventDefault();
@@ -503,5 +515,6 @@ export async function renderLibrary(container: HTMLElement) {
     window.addEventListener('hashchange', () => listenersAbort.abort(), { once: true });
 
     setSortValue(sortBy);
+    loadHeroFact();
     loadGames();
 }

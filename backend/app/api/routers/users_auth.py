@@ -75,6 +75,26 @@ def update_user_password(
     return {"ok": True}
 
 
+@router.delete("/api/users/{user_id}")
+def delete_user(
+    user_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if not is_superadmin(current_user):
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if is_superadmin(user):
+        raise HTTPException(status_code=400, detail="Cannot delete superadmin")
+
+    session.delete(user)
+    session.commit()
+    return {"ok": True}
+
+
 @router.post("/api/auth/login")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),

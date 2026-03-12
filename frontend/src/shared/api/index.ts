@@ -83,6 +83,12 @@ export interface Settings {
     steam_user_id?: string;
 }
 
+export interface GameFact {
+    text: string;
+    game_title: string;
+    source: string;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 
 // Custom error class for API errors
@@ -149,6 +155,14 @@ export const api = {
         return handleResponse<{ ok: boolean }>(res);
     },
 
+    async adminDeleteUser(userId: number): Promise<{ ok: boolean }> {
+        const res = await fetch(`${API_BASE}/users/${userId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        return handleResponse<{ ok: boolean }>(res);
+    },
+
     async login(username: string, password: string): Promise<{ access_token: string, token_type: string, user: User }> {
         const formData = new FormData();
         formData.append('username', username);
@@ -196,6 +210,11 @@ export const api = {
         const url = status ? `${API_BASE}/games?status=${status}` : `${API_BASE}/games`;
         const res = await fetch(url, { headers: getAuthHeaders() });
         return handleResponse<Game[]>(res);
+    },
+
+    async getRandomGameFact(): Promise<GameFact> {
+        const res = await fetch(`${API_BASE}/facts/random`, { headers: getAuthHeaders() });
+        return handleResponse<GameFact>(res);
     },
 
     async getGame(id: number): Promise<Game> {

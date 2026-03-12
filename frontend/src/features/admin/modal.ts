@@ -112,7 +112,12 @@ export async function mountAdminModal() {
                     : '<span class="gt-badge gt-badge-info">User</span>';
                 const actionCell = u.is_superadmin
                     ? '<span class="text-xs text-slate-500">Недоступно</span>'
-                    : `<button class="reset-user-password-btn gt-btn gt-btn-sm px-3 py-1.5" data-id="${u.id}" data-username="${encodeURIComponent(u.username)}">Сменить пароль</button>`;
+                    : `
+                        <div class="flex flex-wrap gap-2">
+                            <button class="reset-user-password-btn gt-btn gt-btn-sm px-3 py-1.5" data-id="${u.id}" data-username="${encodeURIComponent(u.username)}">Сменить пароль</button>
+                            <button class="delete-user-btn gt-btn gt-btn-sm px-3 py-1.5" data-id="${u.id}" data-username="${encodeURIComponent(u.username)}">Удалить</button>
+                        </div>
+                    `;
 
                 tr.innerHTML = `
                     <td class="px-4 py-3 text-gray-500">#${u.id}</td>
@@ -151,6 +156,31 @@ export async function mountAdminModal() {
                         showNotification(`Пароль для ${username} обновлён.`, 'success');
                     } catch (err: any) {
                         showNotification(err.message || 'Ошибка смены пароля.', 'error');
+                    } finally {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    }
+                });
+            });
+
+            tbody.querySelectorAll<HTMLButtonElement>('.delete-user-btn').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const userId = Number(btn.dataset.id || '0');
+                    const username = decodeURIComponent(btn.dataset.username || 'пользователя');
+                    if (!userId) return;
+
+                    const shouldDelete = window.confirm(`Удалить пользователя ${username}? Это действие необратимо.`);
+                    if (!shouldDelete) return;
+
+                    const originalText = btn.textContent;
+                    btn.textContent = '...';
+                    btn.disabled = true;
+                    try {
+                        await api.adminDeleteUser(userId);
+                        showNotification(`Пользователь ${username} удалён.`, 'success');
+                        await loadUsers();
+                    } catch (err: any) {
+                        showNotification(err.message || 'Ошибка удаления пользователя.', 'error');
                     } finally {
                         btn.textContent = originalText;
                         btn.disabled = false;

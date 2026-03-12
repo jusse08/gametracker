@@ -300,7 +300,6 @@ body::after {
     width: min(1360px, 100% - 1.5rem);
     margin: 0 auto;
     padding: var(--space-6) 0 var(--space-8);
-    animation: panel-in 420ms ease-out both;
 }
 
 .gt-page-flow {
