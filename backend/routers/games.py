@@ -92,9 +92,6 @@ def create_game(
     session.add(db_game)
     session.commit()
     session.refresh(db_game)
-
-    ensure_quest_category_exists(session, db_game.id, "General")
-    session.commit()
     return build_game_read(session, db_game)
 
 
@@ -225,9 +222,6 @@ def read_checklist_categories(
             session.add(new_category)
             categories.append(new_category)
             existing_lc.add(normalized.lower())
-
-    if not categories:
-        categories = [ensure_quest_category_exists(session, game_id, "General")]
 
     session.commit()
     for category in categories:

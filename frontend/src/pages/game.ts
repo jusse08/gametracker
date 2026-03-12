@@ -18,6 +18,166 @@ function statusLabel(status: string): string {
     return status;
 }
 
+async function openQuestActionsModal(gameId: number, onDataChanged: () => Promise<void>) {
+    const root = document.getElementById('modal-root');
+    if (!root) {
+        showNotification('Модальное окно недоступно.', 'error');
+        return;
+    }
+
+    const categories = await api.getChecklistCategories(gameId);
+    let activeMode: 'task' | 'category' | 'wiki' = categories.length > 0 ? 'task' : 'category';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'gt-modal-overlay is-open';
+    const modal = document.createElement('div');
+    modal.className = 'gt-panel gt-modal-panel is-open rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden';
+    overlay.appendChild(modal);
+    root.appendChild(overlay);
+
+    const closeModal = () => {
+        overlay.classList.remove('is-open');
+        modal.classList.remove('is-open');
+        setTimeout(() => overlay.remove(), 220);
+    };
+
+    const renderBody = () => {
+        const hasCategories = categories.length > 0;
+        const categoryOptions = categories
+            .map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`)
+            .join('');
+
+        modal.innerHTML = `
+            <div class="p-5 border-b border-gray-700/60 flex items-center justify-between bg-gray-900/65">
+                <h3 class="text-lg font-bold text-white">Добавить в квесты</h3>
+                <button id="questModalCloseBtn" class="text-gray-400 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div class="grid grid-cols-3 gap-2">
+                    <button data-mode="task" class="quest-mode-btn px-3 py-2 rounded-lg text-sm border ${activeMode === 'task' ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-200' : 'border-gray-700 bg-gray-900 text-gray-300'}">Задача</button>
+                    <button data-mode="category" class="quest-mode-btn px-3 py-2 rounded-lg text-sm border ${activeMode === 'category' ? 'border-indigo-400/70 bg-indigo-500/20 text-indigo-200' : 'border-gray-700 bg-gray-900 text-gray-300'}">Категория</button>
+                    <button data-mode="wiki" class="quest-mode-btn px-3 py-2 rounded-lg text-sm border ${activeMode === 'wiki' ? 'border-blue-400/70 bg-blue-500/20 text-blue-200' : 'border-gray-700 bg-gray-900 text-gray-300'}">Импорт Wiki</button>
+                </div>
+
+                <div id="questModeTask" class="${activeMode === 'task' ? '' : 'hidden'} space-y-3">
+                    ${!hasCategories ? '<div class="text-xs text-amber-300 bg-amber-900/20 border border-amber-700/40 px-3 py-2 rounded-lg">Сначала создайте хотя бы одну категорию.</div>' : ''}
+                    <input id="questModalTaskTitle" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Новая задача / миссия..." ${hasCategories ? '' : 'disabled'}>
+                    <div class="flex gap-2">
+                        <select id="questModalTaskCategory" class="flex-grow bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500" ${hasCategories ? '' : 'disabled'}>
+                            ${categoryOptions}
+                        </select>
+                        <button id="questModalCreateTaskBtn" class="bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/40 px-4 py-2.5 rounded-lg text-sm font-medium ${hasCategories ? '' : 'opacity-50 cursor-not-allowed'}" ${hasCategories ? '' : 'disabled'}>Добавить</button>
+                    </div>
+                </div>
+
+                <div id="questModeCategory" class="${activeMode === 'category' ? '' : 'hidden'} space-y-3">
+                    <input id="questModalCategoryName" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Название категории...">
+                    <button id="questModalCreateCategoryBtn" class="bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 border border-indigo-500/40 px-4 py-2.5 rounded-lg text-sm font-medium">Создать категорию</button>
+                </div>
+
+                <div id="questModeWiki" class="${activeMode === 'wiki' ? '' : 'hidden'} space-y-3">
+                    <input id="questModalWikiUrl" type="url" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ссылка на Wiki (URL)...">
+                    <button id="questModalImportWikiBtn" class="bg-blue-600/20 text-blue-300 hover:bg-blue-600/30 border border-blue-500/40 px-4 py-2.5 rounded-lg text-sm font-medium">Импортировать</button>
+                </div>
+            </div>
+        `;
+
+        modal.querySelector('#questModalCloseBtn')?.addEventListener('click', closeModal);
+        modal.querySelectorAll('.quest-mode-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const mode = (btn as HTMLButtonElement).dataset.mode as 'task' | 'category' | 'wiki';
+                activeMode = mode;
+                renderBody();
+            });
+        });
+
+        modal.querySelector('#questModalCreateTaskBtn')?.addEventListener('click', async () => {
+            const titleInput = modal.querySelector<HTMLInputElement>('#questModalTaskTitle');
+            const categoryInput = modal.querySelector<HTMLSelectElement>('#questModalTaskCategory');
+            if (!titleInput || !categoryInput) return;
+            const title = titleInput.value.trim();
+            const category = categoryInput.value.trim();
+            if (!title) {
+                titleInput.focus();
+                showNotification('Введите название задачи.', 'info');
+                return;
+            }
+            if (!category) {
+                showNotification('Выберите категорию.', 'info');
+                return;
+            }
+            try {
+                await api.createChecklistItem(gameId, { title, category });
+                titleInput.value = '';
+                await onDataChanged();
+                showNotification('Задача добавлена', 'success');
+                titleInput.focus();
+            } catch (err: any) {
+                showNotification(err.message || 'Не удалось добавить задачу.', 'error');
+            }
+        });
+
+        modal.querySelector('#questModalCreateCategoryBtn')?.addEventListener('click', async () => {
+            const nameInput = modal.querySelector<HTMLInputElement>('#questModalCategoryName');
+            if (!nameInput) return;
+            const name = nameInput.value.trim();
+            if (!name) {
+                nameInput.focus();
+                showNotification('Введите название категории.', 'info');
+                return;
+            }
+            try {
+                await api.createChecklistCategory(gameId, name);
+                nameInput.value = '';
+                await onDataChanged();
+                showNotification('Категория создана', 'success');
+                const refreshed = await api.getChecklistCategories(gameId);
+                categories.splice(0, categories.length, ...refreshed);
+                activeMode = 'task';
+                renderBody();
+            } catch (err: any) {
+                showNotification(err.message || 'Не удалось создать категорию.', 'error');
+            }
+        });
+
+        modal.querySelector('#questModalImportWikiBtn')?.addEventListener('click', async () => {
+            const urlInput = modal.querySelector<HTMLInputElement>('#questModalWikiUrl');
+            if (!urlInput) return;
+            const wikiUrl = urlInput.value.trim();
+            if (!wikiUrl) {
+                urlInput.focus();
+                showNotification('Введите ссылку на Wiki.', 'info');
+                return;
+            }
+            try {
+                new URL(wikiUrl);
+            } catch {
+                showNotification('Введите корректный URL.', 'error');
+                urlInput.focus();
+                return;
+            }
+            try {
+                await api.importWikiChecklist(gameId, wikiUrl);
+                await onDataChanged();
+                showNotification('Импорт из Wiki завершен', 'success');
+                const refreshed = await api.getChecklistCategories(gameId);
+                categories.splice(0, categories.length, ...refreshed);
+                renderBody();
+            } catch (err: any) {
+                showNotification(err.message || 'Ошибка при импорте из Wiki', 'error');
+            }
+        });
+    };
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeModal();
+        }
+    });
+
+    renderBody();
+}
+
 export async function renderGamePage(container: HTMLElement, gameId: number) {
     container.innerHTML = `
         <div class="flex items-center justify-center min-h-[50vh]">
@@ -139,12 +299,13 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                                 <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                 Квесты и миссии
                             </h2>
+                            <button id="openQuestActionsBtn" class="w-9 h-9 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xl leading-none transition-colors" title="Добавить задачу или категорию">+</button>
                         </div>
 
                         <div class="space-y-4 mb-8">
                             <div>
                                 <div class="flex items-center justify-between mb-2">
-                                    <span class="text-sm text-gray-300">Квесты</span>
+                                    <span class="text-sm text-gray-300">Прогресс</span>
                                     <span id="questProgressText" class="text-xs font-medium text-gray-400 bg-gray-900 px-2.5 py-1 rounded-full border border-gray-700">0%</span>
                                 </div>
                                 <div class="w-full bg-gray-900 rounded-full h-3 overflow-hidden border border-gray-800">
@@ -157,28 +318,6 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                             <div class="animate-pulse h-10 bg-gray-700/50 rounded w-full mb-2"></div>
                             <div class="animate-pulse h-10 bg-gray-700/50 rounded w-full"></div>
                         </div>
-
-                        <!-- Add Task Form -->
-                        <form id="addChecklistForm" class="mt-4 flex flex-col sm:flex-row gap-2 pt-4 border-t border-gray-700/50" novalidate>
-                            <input type="text" id="newTaskTitle" class="flex-grow bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all placeholder-gray-500" placeholder="Новая задача / миссия..." required>
-                            <select id="newTaskCategory" class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all">
-                                <option value="General">General</option>
-                            </select>
-                            <button type="button" id="addCategoryBtn" class="bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 border border-indigo-500/30 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
-                                + Категория
-                            </button>
-                            <button type="submit" class="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
-                                Добавить
-                            </button>
-                        </form>
-
-                        <!-- Import Wiki Form -->
-                        <form id="importWikiForm" class="mt-2 flex gap-2" novalidate>
-                            <input type="url" id="wikiUrlInput" class="flex-grow bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-500" placeholder="Импорт задач из Wiki (URL)..." required>
-                            <button type="submit" class="bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap">
-                                <span class="hidden sm:inline">Импорт с </span>Wiki
-                            </button>
-                        </form>
                     </div>
 
                     ${game.sync_type === 'steam' ? `
@@ -277,35 +416,14 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
         ]);
 
         // Bindings
-        document.getElementById('importWikiForm')?.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const urlInput = document.getElementById('wikiUrlInput') as HTMLInputElement;
-            const wikiUrl = urlInput.value.trim();
-            if (!wikiUrl) {
-                showNotification('Введите ссылку на Wiki.', 'info');
-                urlInput.focus();
-                return;
-            }
+        document.getElementById('openQuestActionsBtn')?.addEventListener('click', async () => {
             try {
-                new URL(wikiUrl);
-            } catch {
-                showNotification('Введите корректный URL.', 'error');
-                urlInput.focus();
-                return;
-            }
-            const btn = (e.currentTarget as HTMLFormElement).querySelector('button');
-            const originalText = btn?.innerHTML || 'Импорт';
-            if (btn) btn.innerHTML = 'Загрузка...';
-            
-            try {
-                await api.importWikiChecklist(gameId, wikiUrl);
-                urlInput.value = '';
-                await loadChecklists(gameId);
-                await updateProgressBar(gameId);
-            } catch (err) {
-                showNotification('Ошибка при импорте из Wiki', 'error');
-            } finally {
-                if (btn) btn.innerHTML = originalText;
+                await openQuestActionsModal(gameId, async () => {
+                    await loadChecklists(gameId);
+                    await updateProgressBar(gameId);
+                });
+            } catch (err: any) {
+                showNotification(err?.message || 'Не удалось открыть окно действий.', 'error');
             }
         });
 
@@ -409,34 +527,6 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
-            }
-        });
-
-        document.getElementById('addChecklistForm')?.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const titleInput = document.getElementById('newTaskTitle') as HTMLInputElement;
-            const categoryInput = document.getElementById('newTaskCategory') as HTMLSelectElement;
-            const title = titleInput.value.trim();
-            if (!title) {
-                showNotification('Введите название задачи.', 'info');
-                titleInput.focus();
-                return;
-            }
-            const category = categoryInput.value.trim() || 'General';
-            await api.createChecklistItem(gameId, { title, category });
-            titleInput.value = '';
-            await loadChecklists(gameId);
-            updateProgressBar(gameId);
-        });
-
-        document.getElementById('addCategoryBtn')?.addEventListener('click', async () => {
-            const categoryName = window.prompt('Введите название новой категории задач:');
-            if (!categoryName || !categoryName.trim()) return;
-            try {
-                await api.createChecklistCategory(gameId, categoryName.trim());
-                await loadChecklists(gameId);
-            } catch (err: any) {
-                showNotification(err.message || 'Не удалось создать категорию.', 'error');
             }
         });
 
@@ -688,12 +778,6 @@ function hydrateChecklistCategoryOptions(categories: QuestCategory[]) {
         option.textContent = category.name;
         categorySelect.appendChild(option);
     });
-    if (sorted.length === 0) {
-        const fallback = document.createElement('option');
-        fallback.value = 'General';
-        fallback.textContent = 'General';
-        categorySelect.appendChild(fallback);
-    }
 }
 
 async function loadNotes(gameId: number) {

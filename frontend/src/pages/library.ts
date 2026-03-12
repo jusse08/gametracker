@@ -60,9 +60,13 @@ export async function renderLibrary(container: HTMLElement) {
                     <input id="librarySearch" class="gt-input pr-9" type="text" placeholder="Быстрый поиск по библиотеке...">
                     <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
-                <select id="libraryGenreFilter" class="gt-input text-sm">
-                    <option value="">Все жанры</option>
-                </select>
+                <div id="libraryGenreWrap" class="library-sort-wrap">
+                    <button id="libraryGenreBtn" class="library-sort-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="libraryGenreLabel">Все жанры</span>
+                        <svg class="library-sort-caret w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="libraryGenreMenu" class="library-sort-menu" role="listbox" aria-label="Фильтр по жанру"></div>
+                </div>
                 <div id="librarySortWrap" class="library-sort-wrap">
                     <button id="librarySortBtn" class="library-sort-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
                         <span id="librarySortLabel">Сначала новые</span>
@@ -84,6 +88,9 @@ export async function renderLibrary(container: HTMLElement) {
 
     const grid = container.querySelector<HTMLElement>('#gamesGrid')!;
     const searchInput = container.querySelector<HTMLInputElement>('#librarySearch')!;
+    const genreWrap = container.querySelector<HTMLElement>('#libraryGenreWrap')!;
+    const genreButton = container.querySelector<HTMLButtonElement>('#libraryGenreBtn')!;
+    const genreLabel = container.querySelector<HTMLElement>('#libraryGenreLabel')!;
     const sortWrap = container.querySelector<HTMLElement>('#librarySortWrap')!;
     const sortButton = container.querySelector<HTMLButtonElement>('#librarySortBtn')!;
     const sortLabel = container.querySelector<HTMLElement>('#librarySortLabel')!;
@@ -165,8 +172,8 @@ export async function renderLibrary(container: HTMLElement) {
     }
 
     function hydrateGenres(games: Game[]) {
-        const genreSelect = container.querySelector<HTMLSelectElement>('#libraryGenreFilter');
-        if (!genreSelect) return;
+        const genreMenu = container.querySelector<HTMLElement>('#libraryGenreMenu');
+        if (!genreMenu) return;
         const genres = new Set<string>();
         games.forEach((game) => {
             (game.genres || []).forEach((genre) => {
@@ -174,19 +181,30 @@ export async function renderLibrary(container: HTMLElement) {
             });
         });
         const sortedGenres = Array.from(genres).sort((a, b) => a.localeCompare(b, 'ru'));
-        genreSelect.innerHTML = '<option value="">Все жанры</option>';
-        sortedGenres.forEach((genre) => {
-            const option = document.createElement('option');
-            option.value = genre;
-            option.textContent = genre;
-            if (genre === selectedGenre) {
-                option.selected = true;
-            }
-            genreSelect.appendChild(option);
+        const genreOptions = [''].concat(sortedGenres);
+        genreMenu.innerHTML = '';
+        genreOptions.forEach((genre) => {
+            const isActive = genre === selectedGenre;
+            const label = genre || 'Все жанры';
+            const option = document.createElement('button');
+            option.type = 'button';
+            option.className = `library-sort-option library-genre-option ${isActive ? 'is-active' : ''}`;
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            option.dataset.value = genre;
+            option.textContent = label;
+            option.addEventListener('click', () => {
+                selectedGenre = option.dataset.value || '';
+                genreLabel.textContent = selectedGenre || 'Все жанры';
+                renderGamesList();
+                closeGenreMenu();
+            });
+            genreMenu.appendChild(option);
         });
+        genreLabel.textContent = selectedGenre || 'Все жанры';
         if (selectedGenre && !sortedGenres.includes(selectedGenre)) {
             selectedGenre = '';
-            genreSelect.value = '';
+            genreLabel.textContent = 'Все жанры';
         }
     }
 
@@ -374,10 +392,14 @@ export async function renderLibrary(container: HTMLElement) {
         renderGamesList();
     }, { signal: listenersAbort.signal });
 
-    container.querySelector<HTMLSelectElement>('#libraryGenreFilter')?.addEventListener('change', (e) => {
-        selectedGenre = (e.target as HTMLSelectElement).value;
-        renderGamesList();
-    }, { signal: listenersAbort.signal });
+    const closeGenreMenu = () => {
+        genreWrap.classList.remove('is-open');
+        genreButton.setAttribute('aria-expanded', 'false');
+    };
+    const openGenreMenu = () => {
+        genreWrap.classList.add('is-open');
+        genreButton.setAttribute('aria-expanded', 'true');
+    };
 
     const closeSortMenu = () => {
         sortWrap.classList.remove('is-open');
@@ -405,7 +427,17 @@ export async function renderLibrary(container: HTMLElement) {
             closeSortMenu();
             return;
         }
+        closeGenreMenu();
         openSortMenu();
+    }, { signal: listenersAbort.signal });
+
+    genreButton.addEventListener('click', () => {
+        if (genreWrap.classList.contains('is-open')) {
+            closeGenreMenu();
+            return;
+        }
+        closeSortMenu();
+        openGenreMenu();
     }, { signal: listenersAbort.signal });
 
     sortOptions.forEach((option) => {
@@ -421,11 +453,15 @@ export async function renderLibrary(container: HTMLElement) {
         if (!sortWrap.contains(e.target as Node)) {
             closeSortMenu();
         }
+        if (!genreWrap.contains(e.target as Node)) {
+            closeGenreMenu();
+        }
     }, { signal: listenersAbort.signal });
 
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeSortMenu();
+            closeGenreMenu();
         }
     }, { signal: listenersAbort.signal });
 
