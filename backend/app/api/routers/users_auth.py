@@ -5,16 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
-from auth import (
+from app.core.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     get_current_user,
     get_password_hash,
     verify_password,
 )
-from database import get_session
-from models import User, UserCreate, UserRead
-from services.common import enrich_user_read, is_superadmin
+from app.core.database import get_session
+from app.domain.models import User, UserCreate, UserRead
+from app.services.common import enrich_user_read, is_superadmin
 
 router = APIRouter()
 
@@ -91,7 +91,7 @@ def update_me(
         current_user.steam_api_key = steam_api_key
     if steam_profile_url is not None:
         current_user.steam_profile_url = steam_profile_url
-        from steam import resolve_steam_id
+        from app.integrations.steam import resolve_steam_id
 
         current_user.steam_user_id = resolve_steam_id(
             current_user.steam_profile_url,

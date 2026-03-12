@@ -1,6 +1,6 @@
-import { api } from '../api';
-import { showNotification } from '../ui';
-import { pickSteamPoster } from '../steamImages';
+import { api } from '../../../shared/api';
+import { showNotification } from '../../../shared/ui';
+import { pickSteamPoster } from '../../../shared/lib/steam-images';
 
 export function mountAddGameModal() {
     const root = document.getElementById('modal-root')!;

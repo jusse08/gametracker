@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
-from auth import get_current_user
-from database import get_session
-from models import Settings, SettingsUpdate, User
+from app.core.auth import get_current_user
+from app.core.database import get_session
+from app.domain.models import Settings, SettingsUpdate, User
 
 router = APIRouter()
 
@@ -40,7 +40,7 @@ def update_settings(
         current_user.steam_api_key = settings_data.steam_api_key
     if settings_data.steam_profile_url is not None:
         current_user.steam_profile_url = settings_data.steam_profile_url
-        from steam import resolve_steam_id
+        from app.integrations.steam import resolve_steam_id
 
         current_user.steam_user_id = resolve_steam_id(
             current_user.steam_profile_url,

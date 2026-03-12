@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from auth import get_current_user
-from database import get_session
-from models import (
+from app.core.auth import get_current_user
+from app.core.database import get_session
+from app.domain.models import (
     Achievement,
     AchievementRead,
     AgentConfig,
@@ -29,16 +29,16 @@ from models import (
     SessionRead,
     User,
 )
-from schemas import WikiImportRequest
-from scraper import parse_wiki_missions
-from steam import (
+from app.domain.schemas import WikiImportRequest
+from app.integrations.scraper import parse_wiki_missions
+from app.integrations.steam import (
     build_steam_store_image_urls,
     fetch_steam_genres,
     fetch_steam_playtime,
     search_steam_games,
     sync_steam_achievements,
 )
-from services.common import (
+from app.services.common import (
     build_game_read,
     ensure_owned_checklist_item_with_detail,
     ensure_owned_game,

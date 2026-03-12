@@ -1,6 +1,6 @@
-import { api, type QuestCategory } from '../api';
-import { showConfirmDialog, showInputDialog, showNotification } from '../ui';
-import { pickSteamHero, pickSteamPoster } from '../steamImages';
+import { api, type QuestCategory } from '../../../shared/api';
+import { showConfirmDialog, showInputDialog, showNotification } from '../../../shared/ui';
+import { pickSteamHero, pickSteamPoster } from '../../../shared/lib/steam-images';
 
 function escapeHtml(value: string): string {
     return value

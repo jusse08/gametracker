@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from models import (
+from app.domain.models import (
     AgentConfig,
     ChecklistItem,
     Game,

@@ -1,6 +1,6 @@
-import { api, type Game } from '../api';
-import { showNotification } from '../ui';
-import { pickSteamPoster } from '../steamImages';
+import { api, type Game } from '../../../shared/api';
+import { showNotification } from '../../../shared/ui';
+import { pickSteamPoster } from '../../../shared/lib/steam-images';
 
 function formatPlaytime(minutes: number): string {
     const h = Math.floor(minutes / 60);

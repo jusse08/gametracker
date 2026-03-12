@@ -2,8 +2,8 @@ import requests
 import re
 from typing import List, Dict, Any, Optional
 from sqlmodel import Session, select
-from database import engine
-from models import Settings
+from app.core.database import engine
+from app.domain.models import Settings
 
 def build_steam_store_image_urls(app_id: int) -> Dict[str, str]:
     base = f"https://cdn.akamai.steamstatic.com/steam/apps/{app_id}"

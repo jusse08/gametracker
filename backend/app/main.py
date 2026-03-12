@@ -5,13 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
-from database import create_db_and_tables, engine
-from auth import get_password_hash
-from models import Settings, User
-from routers.agent import router as agent_router
-from routers.games import router as games_router
-from routers.settings import router as settings_router
-from routers.users_auth import router as users_auth_router
+from app.core.database import create_db_and_tables, engine
+from app.core.auth import get_password_hash
+from app.domain.models import Settings, User
+from app.api.routers.agent import router as agent_router
+from app.api.routers.games import router as games_router
+from app.api.routers.settings import router as settings_router
+from app.api.routers.users_auth import router as users_auth_router
 
 load_dotenv()
 

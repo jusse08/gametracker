@@ -7,8 +7,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import bcrypt
 
-from database import get_session
-from models import User
+from app.core.database import get_session
+from app.domain.models import User
 
 # JWT settings
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")

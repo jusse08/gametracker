@@ -8,17 +8,17 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
-from auth import get_current_user
-from database import get_session
-from models import AgentConfig, AgentConfigRead, Game, GameRead, Session as DbSession, User
-from schemas import (
+from app.core.auth import get_current_user
+from app.core.database import get_session
+from app.domain.models import AgentConfig, AgentConfigRead, Game, GameRead, Session as DbSession, User
+from app.domain.schemas import (
     AgentConfigRequest,
     AgentLaunchAckRequest,
     AgentLaunchRequest,
     AgentTestPingRequest,
     PingRequest,
 )
-from services.common import (
+from app.services.common import (
     build_game_read,
     ensure_owned_game_with_detail,
     get_agent_config_by_game_id,

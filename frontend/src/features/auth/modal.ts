@@ -1,5 +1,5 @@
-import { api } from '../api';
-import { showNotification } from '../ui';
+import { api } from '../../shared/api';
+import { showNotification } from '../../shared/ui';
 
 export function mountAuthModal() {
     const root = document.getElementById('modal-root')!;
