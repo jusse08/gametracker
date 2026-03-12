@@ -9,6 +9,7 @@ class UserBase(SQLModel):
     steam_profile_url: Optional[str] = None
     steam_user_id: Optional[str] = None
     agent_token: Optional[str] = Field(default=None, index=True, unique=True)
+    agent_last_seen_at: Optional[datetime] = None
 
 class User(UserBase, table=True):
     __tablename__ = "users"

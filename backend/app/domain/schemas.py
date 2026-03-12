@@ -28,6 +28,10 @@ class AgentLaunchAckRequest(BaseModel):
     error: Optional[str] = None
 
 
+class AgentNoteUpdateRequest(BaseModel):
+    text: str
+
+
 class GameFactResponse(BaseModel):
     text: str
     game_title: str

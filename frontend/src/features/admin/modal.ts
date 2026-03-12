@@ -1,5 +1,5 @@
 import { api } from '../../shared/api';
-import { showInputDialog, showNotification } from '../../shared/ui';
+import { showConfirmDialog, showInputDialog, showNotification } from '../../shared/ui';
 
 export async function mountAdminModal() {
     const root = document.getElementById('modal-root')!;
@@ -111,11 +111,13 @@ export async function mountAdminModal() {
                     ? '<span class="gt-badge gt-badge-warning">Superadmin</span>'
                     : '<span class="gt-badge gt-badge-info">User</span>';
                 const actionCell = u.is_superadmin
-                    ? '<span class="text-xs text-slate-500">Недоступно</span>'
+                    ? '<span class="inline-flex w-full justify-end text-xs text-slate-500">Недоступно</span>'
                     : `
-                        <div class="flex flex-wrap gap-2">
+                        <div class="flex w-full items-center justify-between gap-2">
                             <button class="reset-user-password-btn gt-btn gt-btn-sm px-3 py-1.5" data-id="${u.id}" data-username="${encodeURIComponent(u.username)}">Сменить пароль</button>
-                            <button class="delete-user-btn gt-btn gt-btn-sm px-3 py-1.5" data-id="${u.id}" data-username="${encodeURIComponent(u.username)}">Удалить</button>
+                            <button class="delete-user-btn gt-icon-btn gt-icon-btn-danger" type="button" title="Удалить пользователя" aria-label="Удалить пользователя" data-id="${u.id}" data-username="${encodeURIComponent(u.username)}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
                         </div>
                     `;
 
@@ -169,11 +171,17 @@ export async function mountAdminModal() {
                     const username = decodeURIComponent(btn.dataset.username || 'пользователя');
                     if (!userId) return;
 
-                    const shouldDelete = window.confirm(`Удалить пользователя ${username}? Это действие необратимо.`);
+                    const shouldDelete = await showConfirmDialog({
+                        title: 'Удалить пользователя?',
+                        message: `Удалить пользователя ${username}? Это действие необратимо.`,
+                        confirmText: 'Удалить',
+                        cancelText: 'Отмена',
+                        danger: true
+                    });
                     if (!shouldDelete) return;
 
-                    const originalText = btn.textContent;
-                    btn.textContent = '...';
+                    const originalHtml = btn.innerHTML;
+                    btn.innerHTML = '...';
                     btn.disabled = true;
                     try {
                         await api.adminDeleteUser(userId);
@@ -182,7 +190,7 @@ export async function mountAdminModal() {
                     } catch (err: any) {
                         showNotification(err.message || 'Ошибка удаления пользователя.', 'error');
                     } finally {
-                        btn.textContent = originalText;
+                        btn.innerHTML = originalHtml;
                         btn.disabled = false;
                     }
                 });

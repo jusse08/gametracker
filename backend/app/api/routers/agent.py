@@ -10,23 +10,26 @@ from sqlmodel import Session, select
 
 from app.core.auth import get_current_user
 from app.core.database import get_session
-from app.domain.models import AgentConfig, AgentConfigRead, Game, GameRead, Session as DbSession, User
+from app.domain.models import AgentConfig, AgentConfigRead, Game, GameRead, Note, NoteCreate, NoteRead, Session as DbSession, User
 from app.domain.schemas import (
     AgentConfigRequest,
     AgentLaunchAckRequest,
     AgentLaunchRequest,
+    AgentNoteUpdateRequest,
     AgentTestPingRequest,
     PingRequest,
 )
 from app.services.common import (
     build_game_read,
     ensure_owned_game_with_detail,
+    ensure_owned_note_with_detail,
     get_agent_config_by_game_id,
     upsert_agent_session,
 )
 
 router = APIRouter()
 AGENT_HEARTBEAT_TIMEOUT_SECONDS = 120
+AGENT_LIVE_HEARTBEAT_TIMEOUT_SECONDS = 6
 
 
 def get_agent_user(
@@ -40,6 +43,17 @@ def get_agent_user(
     agent_user = session.exec(select(User).where(User.agent_token == x_agent_token)).first()
     if not agent_user:
         raise HTTPException(status_code=401, detail="Invalid agent token")
+
+    now = datetime.utcnow()
+    # Live heartbeat: any authenticated agent request refreshes last_seen.
+    if (
+        not agent_user.agent_last_seen_at
+        or (now - agent_user.agent_last_seen_at).total_seconds() >= 1
+    ):
+        agent_user.agent_last_seen_at = now
+        session.add(agent_user)
+        session.commit()
+
     return agent_user
 
 
@@ -162,6 +176,63 @@ def ack_agent_command(
     return {"ok": True, "status": "acknowledged"}
 
 
+@router.get("/api/agent/games/{game_id}/notes", response_model=List[NoteRead])
+def get_game_notes_for_agent(
+    *,
+    session: Session = Depends(get_session),
+    agent_user: User = Depends(get_agent_user),
+    game_id: int,
+):
+    ensure_owned_game_with_detail(session, agent_user, game_id, "Game not found")
+    query = select(Note).where(Note.game_id == game_id).order_by(Note.created_at.desc())
+    return session.exec(query).all()
+
+
+@router.post("/api/agent/games/{game_id}/notes", response_model=NoteRead)
+def create_game_note_for_agent(
+    *,
+    session: Session = Depends(get_session),
+    agent_user: User = Depends(get_agent_user),
+    game_id: int,
+    note: NoteCreate,
+):
+    ensure_owned_game_with_detail(session, agent_user, game_id, "Game not found")
+    db_note = Note.model_validate(note, update={"game_id": game_id})
+    session.add(db_note)
+    session.commit()
+    session.refresh(db_note)
+    return db_note
+
+
+@router.put("/api/agent/notes/{note_id}", response_model=NoteRead)
+def update_note_for_agent(
+    *,
+    session: Session = Depends(get_session),
+    agent_user: User = Depends(get_agent_user),
+    note_id: int,
+    req: AgentNoteUpdateRequest,
+):
+    db_note = ensure_owned_note_with_detail(session, agent_user, note_id, "Note not found")
+    db_note.text = req.text
+    session.add(db_note)
+    session.commit()
+    session.refresh(db_note)
+    return db_note
+
+
+@router.delete("/api/agent/notes/{note_id}")
+def delete_note_for_agent(
+    *,
+    session: Session = Depends(get_session),
+    agent_user: User = Depends(get_agent_user),
+    note_id: int,
+):
+    db_note = ensure_owned_note_with_detail(session, agent_user, note_id, "Note not found")
+    session.delete(db_note)
+    session.commit()
+    return {"ok": True}
+
+
 @router.get("/api/agent/download")
 def download_agent():
     base_dir = os.path.dirname(__file__)
@@ -215,7 +286,16 @@ def test_agent_ping(
         )
 
     now = datetime.utcnow()
-    active_since = now - timedelta(seconds=AGENT_HEARTBEAT_TIMEOUT_SECONDS)
+    active_since = now - timedelta(seconds=AGENT_LIVE_HEARTBEAT_TIMEOUT_SECONDS)
+    if not current_user.agent_last_seen_at or current_user.agent_last_seen_at < active_since:
+        return {
+            "ok": False,
+            "message": "Агент сейчас не в сети. Запустите агент и попробуйте снова.",
+            "exe_name": game.exe_name,
+            "status": "agent_inactive",
+        }
+
+    session_active_since = now - timedelta(seconds=AGENT_HEARTBEAT_TIMEOUT_SECONDS)
     last_agent_session = session.exec(
         select(DbSession)
         .where(DbSession.game_id == game_id, DbSession.source == "agent")
@@ -224,19 +304,19 @@ def test_agent_ping(
 
     if not last_agent_session:
         return {
-            "ok": False,
-            "message": "Агент не найден в сети: ещё не было ни одного ping от установленного агента.",
+            "ok": True,
+            "message": "Агент в сети. Для этой игры пока нет игровых ping-сессий.",
             "exe_name": game.exe_name,
-            "status": "agent_inactive",
+            "status": "agent_active",
         }
 
     last_seen = last_agent_session.ended_at or last_agent_session.started_at
-    if last_seen < active_since:
+    if last_seen < session_active_since:
         return {
-            "ok": False,
-            "message": "Агент сейчас не активен. Запустите агент и игру, затем попробуйте снова.",
+            "ok": True,
+            "message": "Агент в сети, но текущая игра сейчас не активна.",
             "exe_name": game.exe_name,
-            "status": "agent_inactive",
+            "status": "agent_active",
             "duration_minutes": last_agent_session.duration_minutes,
         }
 
