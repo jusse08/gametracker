@@ -13,6 +13,7 @@ export interface Game {
     title: string;
     status: string;
     cover_url?: string;
+    cover_urls?: Partial<Record<'poster' | 'poster2x' | 'hero' | 'hero_blur' | 'header' | 'capsule_main', string>>;
     description?: string;
     sync_type: 'steam' | 'non_steam';
     steam_app_id?: number;

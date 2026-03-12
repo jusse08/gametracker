@@ -1,5 +1,6 @@
 import { api } from '../api';
 import { showNotification } from '../ui';
+import { pickSteamPoster } from '../steamImages';
 
 export function mountAddGameModal() {
     const root = document.getElementById('modal-root')!;
@@ -13,12 +14,12 @@ export function mountAddGameModal() {
     modal.className = "gt-panel gt-modal-panel rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]";
     
     modal.innerHTML = `
-        <div class="p-6 border-b border-slate-600/45 flex justify-between items-center bg-slate-900/55">
+        <div class="gt-modal-header">
             <div>
-                <h2 class="text-2xl font-bold">Добавить игру</h2>
+                <h2 class="gt-modal-title text-2xl">Добавить игру</h2>
                 <p class="text-sm text-slate-300/80 mt-1">Поиск по базе Steam</p>
             </div>
-            <button id="closeModal" class="text-slate-400 hover:text-white hover:bg-slate-700/60 p-2 rounded-lg transition-colors">
+            <button id="closeModal" class="gt-modal-close">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
@@ -122,7 +123,7 @@ export function mountAddGameModal() {
             resultsBox.innerHTML = '';
             
             if (results.length === 0) {
-                resultsBox.innerHTML = `<div class="text-center py-6 text-gray-400">Ничего не найдено</div>`;
+                resultsBox.innerHTML = `<div class="gt-empty-state">Ничего не найдено</div>`;
                 return;
             }
 
@@ -148,12 +149,14 @@ export function mountAddGameModal() {
                 // Animation stagger
                 el.style.animation = `fadeIn 0.3s ease-out ${idx * 0.05}s both`;
 
-                const coverUrl = game.cover_url || `https://cdn.akamai.steamstatic.com/steam/apps/${game.steam_app_id}/header.jpg`;
+                const poster = pickSteamPoster(game);
+                const coverUrl = poster.src || game.cover_url || `https://cdn.akamai.steamstatic.com/steam/apps/${game.steam_app_id}/header.jpg`;
+                const coverFallback = poster.fallback || '';
 
                 el.innerHTML = `
                     <div class="flex items-center gap-4">
                         <div class="w-12 h-16 bg-slate-900 rounded flex items-center justify-center border border-slate-600/45 shrink-0 overflow-hidden">
-                            <img src="${coverUrl}" alt="${game.title}" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'; this.parentElement.innerHTML='<svg class=\\'w-6 h-6 text-slate-500\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></svg>'">
+                            <img src="${coverUrl}" alt="${game.title}" class="w-full h-full object-cover" loading="lazy" onerror="if(!this.dataset.fallback && '${coverFallback}'){this.dataset.fallback='1';this.src='${coverFallback}';return;} this.style.display='none'; this.parentElement.innerHTML='<svg class=\\'w-6 h-6 text-slate-500\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></svg>'">
                         </div>
                         <div>
                             <div class="font-medium text-white group-hover:text-cyan-200 transition-colors">${game.title}</div>
@@ -188,11 +191,12 @@ export function mountAddGameModal() {
                     target.innerHTML = '<div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>';
 
                     try {
+                        const targetPoster = pickSteamPoster(targetGame);
                         await api.createGame({
                             title: targetGame.title,
                             sync_type: syncType,
                             steam_app_id: targetGame.steam_app_id,
-                            cover_url: targetGame.cover_url || '',
+                            cover_url: targetPoster.src || targetGame.cover_url || '',
                             status: 'backlog'
                         });
 
@@ -214,7 +218,7 @@ export function mountAddGameModal() {
             });
 
         } catch (e) {
-            resultsBox.innerHTML = `<div class="text-center py-6 text-red-500">Ошибка поиска. Сервер FastAPI запущен?</div>`;
+            resultsBox.innerHTML = `<div class="gt-empty-state error">Ошибка поиска. Сервер FastAPI запущен?</div>`;
         }
     });
 }

@@ -11,12 +11,12 @@ export async function mountAdminModal() {
     modal.className = "gt-panel gt-modal-panel rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col";
 
     modal.innerHTML = `
-        <div class="px-6 py-4 border-b border-slate-600/40 flex justify-between items-center bg-slate-900/55 sticky top-0">
-            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+        <div class="gt-modal-header sticky">
+            <h2 class="gt-modal-title">
                 <svg class="w-5 h-5 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
                 Админ Панель
             </h2>
-            <button id="closeAdminBtn" class="text-slate-400 hover:text-white transition-colors">
+            <button id="closeAdminBtn" class="gt-modal-close">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
@@ -27,14 +27,14 @@ export async function mountAdminModal() {
                 <h3 class="text-sm font-bold text-slate-300/80 uppercase tracking-widest mb-4">Создать пользователя</h3>
                 <form id="createUserForm" class="flex gap-4 items-end" novalidate>
                     <div class="flex-1">
-                        <label class="block text-xs text-slate-400 mb-1">Имя пользователя</label>
+                        <label class="gt-label mb-1">Имя пользователя</label>
                         <input type="text" id="newUsername" class="gt-input" required>
                     </div>
                     <div class="flex-1">
-                        <label class="block text-xs text-slate-400 mb-1">Пароль</label>
+                        <label class="gt-label mb-1">Пароль</label>
                         <input type="password" id="newPassword" class="gt-input" required minlength="6">
                     </div>
-                    <button type="submit" class="gt-btn gt-btn-admin px-6 py-2 whitespace-nowrap">
+                    <button type="submit" class="gt-btn gt-btn-admin gt-btn-md px-6 whitespace-nowrap">
                         Создать
                     </button>
                 </form>
@@ -43,16 +43,16 @@ export async function mountAdminModal() {
             <!-- Users List -->
             <div>
                 <h3 class="text-sm font-bold text-slate-300/80 uppercase tracking-widest mb-4">Список пользователей</h3>
-                <div class="bg-slate-900/65 rounded-xl border border-slate-600/40 overflow-hidden">
-                    <table class="w-full text-left font-mono">
-                        <thead class="bg-slate-800/85 text-xs text-slate-300">
+                <div class="gt-table-shell">
+                    <table class="gt-table font-mono">
+                        <thead>
                             <tr>
                                 <th class="px-4 py-3 font-medium">ID</th>
                                 <th class="px-4 py-3 font-medium">Username</th>
                                 <th class="px-4 py-3 font-medium">Роль</th>
                             </tr>
                         </thead>
-                        <tbody id="usersTableBody" class="divide-y divide-slate-700/60 text-sm">
+                        <tbody id="usersTableBody" class="text-sm">
                             <tr>
                                 <td colspan="3" class="px-4 py-8 text-center text-gray-500 text-sm">Loading users...</td>
                             </tr>
@@ -96,11 +96,10 @@ export async function mountAdminModal() {
 
             users.forEach(u => {
                 const tr = document.createElement('tr');
-                tr.className = 'hover:bg-slate-800/40 transition-colors';
                 
                 const roleBadge = u.is_superadmin 
-                    ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-400/10 text-amber-300 border border-amber-400/25">Superadmin</span>'
-                    : '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-400/10 text-cyan-200 border border-cyan-400/25">User</span>';
+                    ? '<span class="gt-badge gt-badge-warning">Superadmin</span>'
+                    : '<span class="gt-badge gt-badge-info">User</span>';
 
                 tr.innerHTML = `
                     <td class="px-4 py-3 text-gray-500">#${u.id}</td>

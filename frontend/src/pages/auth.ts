@@ -24,14 +24,14 @@ export function mountAuthModal() {
             <!-- Login Form -->
             <form id="loginForm" class="space-y-4" novalidate>
                 <div>
-                    <label class="block text-xs font-bold text-slate-300/80 uppercase tracking-widest mb-2">Имя пользователя</label>
+                    <label class="gt-label">Имя пользователя</label>
                     <input type="text" id="loginUsername" class="gt-input" required>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-300/80 uppercase tracking-widest mb-2">Пароль</label>
+                    <label class="gt-label">Пароль</label>
                     <input type="password" id="loginPassword" class="gt-input" required>
                 </div>
-                <button type="submit" class="w-full gt-btn gt-btn-primary justify-center py-3">
+                <button type="submit" class="w-full gt-btn gt-btn-primary gt-btn-lg justify-center">
                     Войти
                 </button>
             </form>

@@ -1,5 +1,6 @@
 import { api, type Game } from '../api';
 import { showNotification } from '../ui';
+import { pickSteamPoster } from '../steamImages';
 
 function formatPlaytime(minutes: number): string {
     const h = Math.floor(minutes / 60);
@@ -61,14 +62,14 @@ export async function renderLibrary(container: HTMLElement) {
                     <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
                 <div id="libraryGenreWrap" class="library-sort-wrap">
-                    <button id="libraryGenreBtn" class="library-sort-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <button id="libraryGenreBtn" class="library-sort-btn gt-dropdown-control" type="button" aria-haspopup="listbox" aria-expanded="false">
                         <span id="libraryGenreLabel">Все жанры</span>
                         <svg class="library-sort-caret w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
                     <div id="libraryGenreMenu" class="library-sort-menu" role="listbox" aria-label="Фильтр по жанру"></div>
                 </div>
                 <div id="librarySortWrap" class="library-sort-wrap">
-                    <button id="librarySortBtn" class="library-sort-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <button id="librarySortBtn" class="library-sort-btn gt-dropdown-control" type="button" aria-haspopup="listbox" aria-expanded="false">
                         <span id="librarySortLabel">Сначала новые</span>
                         <svg class="library-sort-caret w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
@@ -274,7 +275,9 @@ export async function renderLibrary(container: HTMLElement) {
         }
 
         games.forEach((game, index) => {
-            const cover = game.cover_url || 'https://via.placeholder.com/300x400/111827/6b7280?text=No+Cover';
+            const poster = pickSteamPoster(game);
+            const cover = poster.src || game.cover_url || 'https://via.placeholder.com/300x400/111827/6b7280?text=No+Cover';
+            const coverFallback = poster.fallback || '';
             const progressPercent = profileProgressByGameId.get(game.id) ?? 0;
 
             const card = document.createElement('a');
@@ -317,9 +320,9 @@ export async function renderLibrary(container: HTMLElement) {
 
             card.innerHTML = `
                 <div class="aspect-[3/4] relative overflow-hidden pointer-events-none">
-                    <img src="${cover}" alt="${game.title}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy">
+                    <img src="${cover}" alt="${game.title}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" onerror="if(!this.dataset.fallback && '${coverFallback}'){this.dataset.fallback='1';this.src='${coverFallback}';}">
                     <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/30 to-transparent"></div>
-                    <div class="absolute top-2 left-2 gt-chip">${statusLabel(game.status)}</div>
+                    <div class="absolute top-2 left-2 gt-badge gt-badge-info">${statusLabel(game.status)}</div>
                     <div class="absolute bottom-0 left-0 right-0 p-3">
                         <h3 class="font-bold text-white leading-tight line-clamp-2">${game.title}</h3>
                     </div>

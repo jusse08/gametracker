@@ -31,7 +31,13 @@ from models import (
 )
 from schemas import WikiImportRequest
 from scraper import parse_wiki_missions
-from steam import fetch_steam_genres, fetch_steam_playtime, search_steam_games, sync_steam_achievements
+from steam import (
+    build_steam_store_image_urls,
+    fetch_steam_genres,
+    fetch_steam_playtime,
+    search_steam_games,
+    sync_steam_achievements,
+)
 from services.common import (
     build_game_read,
     ensure_owned_checklist_item_with_detail,
@@ -85,6 +91,12 @@ def create_game(
         raise HTTPException(status_code=400, detail="Game with this title already exists")
 
     game_data = game.model_dump()
+    if game_data.get("sync_type") == "steam" and game_data.get("steam_app_id"):
+        steam_images = build_steam_store_image_urls(game_data["steam_app_id"])
+        current_cover = (game_data.get("cover_url") or "").strip()
+        if not current_cover or current_cover.endswith("/header.jpg"):
+            game_data["cover_url"] = steam_images["poster2x"]
+
     if game_data.get("steam_app_id") and not game_data.get("genres"):
         game_data["genres"] = fetch_steam_genres(game_data["steam_app_id"])
 
@@ -140,6 +152,12 @@ def update_game(
 
     for key, value in data.items():
         setattr(db_game, key, value)
+
+    if db_game.sync_type == "steam" and db_game.steam_app_id:
+        steam_images = build_steam_store_image_urls(db_game.steam_app_id)
+        current_cover = (db_game.cover_url or "").strip()
+        if not current_cover or current_cover.endswith("/header.jpg"):
+            db_game.cover_url = steam_images["poster2x"]
 
     if db_game.sync_type == "steam":
         db_game.exe_name = None

@@ -1,5 +1,6 @@
 import { api, type QuestCategory } from '../api';
-import { showConfirmDialog, showNotification } from '../ui';
+import { showConfirmDialog, showInputDialog, showNotification } from '../ui';
+import { pickSteamHero, pickSteamPoster } from '../steamImages';
 
 function escapeHtml(value: string): string {
     return value
@@ -29,16 +30,21 @@ async function openQuestActionsModal(gameId: number, onDataChanged: () => Promis
     let activeMode: 'task' | 'category' | 'wiki' = categories.length > 0 ? 'task' : 'category';
 
     const overlay = document.createElement('div');
-    overlay.className = 'gt-modal-overlay is-open';
+    overlay.className = 'gt-modal-overlay';
     const modal = document.createElement('div');
-    modal.className = 'gt-panel gt-modal-panel is-open rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden';
+    modal.className = 'gt-panel gt-modal-panel rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]';
     overlay.appendChild(modal);
     root.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+        overlay.classList.add('is-open');
+        modal.classList.add('is-open');
+    });
 
     const closeModal = () => {
         overlay.classList.remove('is-open');
         modal.classList.remove('is-open');
-        setTimeout(() => overlay.remove(), 220);
+        setTimeout(() => overlay.remove(), 240);
     };
 
     const renderBody = () => {
@@ -48,36 +54,38 @@ async function openQuestActionsModal(gameId: number, onDataChanged: () => Promis
             .join('');
 
         modal.innerHTML = `
-            <div class="p-5 border-b border-gray-700/60 flex items-center justify-between bg-gray-900/65">
-                <h3 class="text-lg font-bold text-white">Добавить в квесты</h3>
-                <button id="questModalCloseBtn" class="text-gray-400 hover:text-white text-xl leading-none">×</button>
+            <div class="gt-modal-header">
+                <h2 class="gt-modal-title text-2xl">Добавить в квесты</h2>
+                <button id="questModalCloseBtn" class="gt-modal-close">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
             </div>
-            <div class="p-5 space-y-4">
+            <div class="p-6 bg-slate-900/35 space-y-5 overflow-y-auto">
                 <div class="grid grid-cols-3 gap-2">
-                    <button data-mode="task" class="quest-mode-btn px-3 py-2 rounded-lg text-sm border ${activeMode === 'task' ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-200' : 'border-gray-700 bg-gray-900 text-gray-300'}">Задача</button>
-                    <button data-mode="category" class="quest-mode-btn px-3 py-2 rounded-lg text-sm border ${activeMode === 'category' ? 'border-indigo-400/70 bg-indigo-500/20 text-indigo-200' : 'border-gray-700 bg-gray-900 text-gray-300'}">Категория</button>
-                    <button data-mode="wiki" class="quest-mode-btn px-3 py-2 rounded-lg text-sm border ${activeMode === 'wiki' ? 'border-blue-400/70 bg-blue-500/20 text-blue-200' : 'border-gray-700 bg-gray-900 text-gray-300'}">Импорт Wiki</button>
+                    <button data-mode="task" class="quest-mode-btn px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${activeMode === 'task' ? 'border-emerald-300/60 bg-emerald-300/20 text-emerald-100' : 'border-slate-600/45 bg-slate-900/60 text-slate-300 hover:bg-slate-800/70'}">Задача</button>
+                    <button data-mode="category" class="quest-mode-btn px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${activeMode === 'category' ? 'border-indigo-300/60 bg-indigo-300/20 text-indigo-100' : 'border-slate-600/45 bg-slate-900/60 text-slate-300 hover:bg-slate-800/70'}">Категория</button>
+                    <button data-mode="wiki" class="quest-mode-btn px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${activeMode === 'wiki' ? 'border-cyan-300/60 bg-cyan-300/20 text-cyan-100' : 'border-slate-600/45 bg-slate-900/60 text-slate-300 hover:bg-slate-800/70'}">Импорт Wiki</button>
                 </div>
 
                 <div id="questModeTask" class="${activeMode === 'task' ? '' : 'hidden'} space-y-3">
                     ${!hasCategories ? '<div class="text-xs text-amber-300 bg-amber-900/20 border border-amber-700/40 px-3 py-2 rounded-lg">Сначала создайте хотя бы одну категорию.</div>' : ''}
-                    <input id="questModalTaskTitle" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Новая задача / миссия..." ${hasCategories ? '' : 'disabled'}>
+                    <input id="questModalTaskTitle" type="text" class="gt-input text-sm" placeholder="Новая задача / миссия..." ${hasCategories ? '' : 'disabled'}>
                     <div class="flex gap-2">
-                        <select id="questModalTaskCategory" class="flex-grow bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500" ${hasCategories ? '' : 'disabled'}>
+                        <select id="questModalTaskCategory" class="gt-input gt-select text-sm flex-grow" ${hasCategories ? '' : 'disabled'}>
                             ${categoryOptions}
                         </select>
-                        <button id="questModalCreateTaskBtn" class="bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/40 px-4 py-2.5 rounded-lg text-sm font-medium ${hasCategories ? '' : 'opacity-50 cursor-not-allowed'}" ${hasCategories ? '' : 'disabled'}>Добавить</button>
+                        <button id="questModalCreateTaskBtn" class="gt-btn gt-btn-primary px-5 ${hasCategories ? '' : 'opacity-50 cursor-not-allowed'}" ${hasCategories ? '' : 'disabled'}>Добавить</button>
                     </div>
                 </div>
 
                 <div id="questModeCategory" class="${activeMode === 'category' ? '' : 'hidden'} space-y-3">
-                    <input id="questModalCategoryName" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Название категории...">
-                    <button id="questModalCreateCategoryBtn" class="bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 border border-indigo-500/40 px-4 py-2.5 rounded-lg text-sm font-medium">Создать категорию</button>
+                    <input id="questModalCategoryName" type="text" class="gt-input text-sm" placeholder="Название категории...">
+                    <button id="questModalCreateCategoryBtn" class="gt-btn px-5 border-indigo-300/45 bg-indigo-300/20 text-indigo-100 hover:bg-indigo-300/30">Создать категорию</button>
                 </div>
 
                 <div id="questModeWiki" class="${activeMode === 'wiki' ? '' : 'hidden'} space-y-3">
-                    <input id="questModalWikiUrl" type="url" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ссылка на Wiki (URL)...">
-                    <button id="questModalImportWikiBtn" class="bg-blue-600/20 text-blue-300 hover:bg-blue-600/30 border border-blue-500/40 px-4 py-2.5 rounded-lg text-sm font-medium">Импортировать</button>
+                    <input id="questModalWikiUrl" type="url" class="gt-input text-sm" placeholder="Ссылка на Wiki (URL)...">
+                    <button id="questModalImportWikiBtn" class="gt-btn px-5 border-cyan-300/45 bg-cyan-300/20 text-cyan-100 hover:bg-cyan-300/30">Импортировать</button>
                 </div>
             </div>
         `;
@@ -187,11 +195,16 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
 
     try {
         let game = await api.getGame(gameId);
-        const cover = game.cover_url || 'https://via.placeholder.com/300x400/1f2937/4b5563?text=Нет+обложки';
+        const poster = pickSteamPoster(game);
+        const heroImage = pickSteamHero(game);
+        const cover = poster.src || game.cover_url || 'https://via.placeholder.com/300x400/1f2937/4b5563?text=Нет+обложки';
+        const coverFallback = poster.fallback || '';
+        const heroCover = heroImage.src || cover;
+        const heroFallback = heroImage.fallback || coverFallback;
         const syncTypeLabel = game.sync_type === 'steam' ? 'Steam' : 'Non-Steam';
         const syncTypeBadgeClass = game.sync_type === 'steam'
-            ? 'bg-sky-500/15 text-sky-300 border border-sky-400/30'
-            : 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30';
+            ? 'gt-badge gt-badge-info'
+            : 'gt-badge gt-badge-success';
         const achievementsTitle = game.sync_type === 'steam' ? 'Достижения Steam' : 'Синхронизация через агент';
         const achievementsAction = game.sync_type === 'steam'
             ? `
@@ -212,7 +225,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             `
             : '';
         const agentPanel = `
-                    <div class="bg-gray-800/50 rounded-2xl p-6 border border-gray-700/50">
+                    <div class="gt-section-card">
                         <div class="flex items-start justify-between gap-4 mb-4">
                             <div>
                                 <h2 class="text-xl font-bold flex items-center gap-2">
@@ -236,7 +249,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             <div class="relative w-full h-64 md:h-80 lg:h-96 rounded-3xl overflow-hidden mb-8 shadow-2xl ring-1 ring-white/10 group">
                 <!-- Blurred background image -->
                 <div class="absolute inset-0 z-0">
-                    <img src="${cover}" class="w-full h-full object-cover opacity-30 blur-xl scale-110 object-top" />
+                    <img src="${heroCover}" class="w-full h-full object-cover opacity-30 blur-xl scale-110 object-top" onerror="if(!this.dataset.fallback && '${heroFallback}'){this.dataset.fallback='1';this.src='${heroFallback}';}" />
                 </div>
                 <!-- Gradient overlay -->
                 <div class="absolute inset-0 z-10 bg-gradient-to-t from-gray-900 via-gray-900/80 to-transparent"></div>
@@ -245,17 +258,17 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                     <div class="flex flex-col md:flex-row items-start md:items-end gap-6 w-full">
                         <!-- Cover Image shadow-drop -->
                         <div class="w-32 md:w-48 lg:w-56 aspect-[3/4] rounded-xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] ring-1 ring-white/20 shrink-0 transform group-hover:-translate-y-2 transition-transform duration-500">
-                            <img src="${cover}" alt="${game.title}" class="w-full h-full object-cover" />
+                            <img src="${cover}" alt="${game.title}" class="w-full h-full object-cover" onerror="if(!this.dataset.fallback && '${coverFallback}'){this.dataset.fallback='1';this.src='${coverFallback}';}" />
                         </div>
                         
                         <div class="flex-grow pb-2 w-full">
                             <div class="flex justify-between items-start w-full">
                                 <div>
                                     <div class="flex flex-wrap gap-2 mb-3">
-                                        <span class="bg-blue-600/20 text-blue-400 border border-blue-500/30 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide backdrop-blur-sm">
+                                        <span class="gt-badge gt-badge-info">
                                             ${statusLabel(game.status)}
                                         </span>
-                                        <span class="${syncTypeBadgeClass} text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide backdrop-blur-sm">${syncTypeLabel}</span>
+                                        <span class="${syncTypeBadgeClass}">${syncTypeLabel}</span>
                                     </div>
                                     <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 tracking-tight drop-shadow-lg">${game.title}</h1>
                                     <div class="flex flex-wrap items-center gap-2 mt-2">
@@ -276,7 +289,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                             Играть
                                         </button>
-                                        <button id="deleteGameBtn" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-2 rounded-lg transition-all" title="Удалить игру">
+                                        <button id="deleteGameBtn" class="gt-icon-btn gt-icon-btn-danger w-11 h-10" title="Удалить игру">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                         </button>
                                     </div>
@@ -293,13 +306,15 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                 <div class="lg:col-span-2 space-y-8">
                     ${agentPanel}
                     <!-- Progress Section -->
-                    <div class="bg-gray-800/50 rounded-2xl p-6 border border-gray-700/50">
+                    <div class="gt-section-card">
                         <div class="flex justify-between items-center mb-6">
                             <h2 class="text-2xl font-bold flex items-center gap-2">
                                 <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                 Квесты и миссии
                             </h2>
-                            <button id="openQuestActionsBtn" class="w-9 h-9 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xl leading-none transition-colors" title="Добавить задачу или категорию">+</button>
+                            <button id="openQuestActionsBtn" class="gt-icon-btn gt-icon-btn-success w-9 h-9" title="Добавить задачу или категорию">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4" d="M12 5v14M5 12h14"></path></svg>
+                            </button>
                         </div>
 
                         <div class="space-y-4 mb-8">
@@ -315,14 +330,14 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                         </div>
 
                         <div id="checklistContainer">
-                            <div class="animate-pulse h-10 bg-gray-700/50 rounded w-full mb-2"></div>
-                            <div class="animate-pulse h-10 bg-gray-700/50 rounded w-full"></div>
+                            <div class="gt-skeleton-block h-10 w-full mb-2"></div>
+                            <div class="gt-skeleton-block h-10 w-full"></div>
                         </div>
                     </div>
 
                     ${game.sync_type === 'steam' ? `
                     <!-- Achievements Section -->
-                    <div class="bg-gray-800/50 rounded-2xl p-6 border border-gray-700/50 flex flex-col min-h-[250px] relative overflow-hidden group">
+                    <div class="gt-section-card flex flex-col min-h-[250px] relative overflow-hidden group">
                         <div class="absolute inset-0 bg-gradient-to-br from-blue-900/10 to-purple-900/10 z-0"></div>
                         <div class="relative z-10 flex justify-between items-center mb-6">
                             <h3 class="text-xl font-bold text-gray-300 flex items-center gap-2">
@@ -342,7 +357,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                         </div>
                         <div id="achievementsContainer" class="relative z-10 grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[300px] pr-2 scrollbar-thin scrollbar-thumb-gray-700">
                             <!-- empty / loaded content -->
-                            <div class="animate-pulse h-20 bg-gray-700/30 rounded-xl col-span-2 sm:col-span-3"></div>
+                            <div class="gt-skeleton-block h-20 col-span-2 sm:col-span-3"></div>
                         </div>
                     </div>
                     ` : ''}
@@ -365,14 +380,14 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                             <button id="playGameBtnMobile" class="bg-blue-600 text-white rounded-xl flex-grow font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20">
                                 Играть
                             </button>
-                            <button id="deleteGameBtnMobile" class="bg-red-500/10 text-red-400 border border-red-500/20 p-4 rounded-xl">
+                            <button id="deleteGameBtnMobile" class="gt-icon-btn gt-icon-btn-danger w-14 h-14 rounded-xl">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                             </button>
                         </div>
                     </div>
 
                     <!-- History Section -->
-                    <div class="bg-gray-800/50 rounded-2xl p-6 border border-gray-700/50 flex flex-col">
+                    <div class="gt-section-card flex flex-col">
                         <div class="flex justify-between items-center mb-4 gap-2 pb-4 border-b border-gray-700/50">
                             <h2 class="text-xl font-bold flex items-center gap-2">
                                 <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -381,19 +396,19 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                             ${sessionsAction}
                         </div>
                         <div id="sessionsContainer" class="space-y-3 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-700">
-                             <div class="animate-pulse h-12 bg-gray-700/30 rounded-lg"></div>
+                             <div class="gt-skeleton-block h-12"></div>
                         </div>
                     </div>
 
                     <!-- Notes Section -->
-                    <div class="bg-gray-800/50 rounded-2xl p-6 border border-gray-700/50 h-[600px] flex flex-col">
+                    <div class="gt-section-card h-[600px] flex flex-col">
                         <h2 class="text-xl font-bold mb-4 flex items-center gap-2 pb-4 border-b border-gray-700/50">
                             <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                             Дневник / Заметки
                         </h2>
                         
                         <div id="notesContainer" class="flex-grow overflow-y-auto pr-2 space-y-4 mb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                            <div class="animate-pulse h-20 bg-gray-700/30 rounded-xl mb-3"></div>
+                            <div class="gt-skeleton-block h-20 mb-3"></div>
                         </div>
 
                         <form id="addNoteForm" class="mt-auto relative" novalidate>
@@ -640,7 +655,7 @@ async function loadChecklists(gameId: number) {
     });
 
     if (Object.keys(groups).length === 0) {
-        container.innerHTML = '<div class="text-gray-500 text-center py-4 text-sm bg-gray-900/50 rounded-lg">Список задач пуст</div>';
+        container.innerHTML = '<div class="gt-empty-state">Список задач пуст</div>';
         return;
     }
 
@@ -665,15 +680,15 @@ async function loadChecklists(gameId: number) {
                     <span class="font-bold text-sm uppercase tracking-wider text-gray-300">${safeCategory}</span>
                     <span class="text-[10px] bg-gray-800 text-gray-500 px-2 py-0.5 rounded-full font-mono">${completedCount}/${items.length}</span>
                 </div>
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3">
                     <div class="hidden sm:block h-1.5 w-24 bg-gray-800 rounded-full overflow-hidden border border-gray-700/50">
                         <div class="h-full bg-emerald-500 transition-all duration-500" style="width: ${percent}%"></div>
                     </div>
-                    <span class="text-[10px] font-bold text-gray-600 w-8 text-right">${percent}%</span>
-                    <button data-cat="${safeCategory}" class="rename-cat-btn p-1.5 text-gray-600 hover:text-blue-400 opacity-0 group-hover/sum:opacity-100 transition-opacity" title="Переименовать категорию">
+                    <span class="text-[10px] font-bold text-gray-600 w-8 text-right shrink-0">${percent}%</span>
+                    <button data-cat="${safeCategory}" class="rename-cat-btn gt-icon-btn gt-icon-btn-info w-7 h-7" title="Переименовать категорию">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                     </button>
-                    <button data-cat="${safeCategory}" class="delete-cat-btn p-1.5 text-gray-600 hover:text-red-400 opacity-0 group-hover/sum:opacity-100 transition-opacity ml-2" title="Удалить всю категорию">
+                    <button data-cat="${safeCategory}" class="delete-cat-btn gt-icon-btn gt-icon-btn-danger w-7 h-7" title="Удалить всю категорию">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                 </div>
@@ -686,7 +701,7 @@ async function loadChecklists(gameId: number) {
                             <svg class="w-3.5 h-3.5 text-white absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-0 ${item.completed ? 'opacity-100' : ''}" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                         </div>
                         <span class="${item.completed ? 'line-through decoration-gray-600' : ''} text-sm flex-grow">${escapeHtml(item.title)}</span>
-                        <button data-id="${item.id}" class="delete-item-btn p-1 text-gray-600 hover:text-red-400 opacity-0 group-hover/item:opacity-100 transition-opacity" title="Удалить задачу">
+                        <button data-id="${item.id}" class="delete-item-btn gt-icon-btn gt-icon-btn-danger opacity-0 group-hover/item:opacity-100 transition-opacity w-7 h-7" title="Удалить задачу">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
                     </div>
@@ -714,8 +729,15 @@ async function loadChecklists(gameId: number) {
             e.stopPropagation();
             const oldName = (e.currentTarget as HTMLButtonElement).getAttribute('data-cat') || '';
             if (!oldName) return;
-            const newName = window.prompt(`Новое имя для категории "${oldName}":`, oldName);
-            if (!newName || !newName.trim() || newName.trim() === oldName) return;
+            const newName = await showInputDialog({
+                title: 'Переименовать категорию',
+                message: `Введите новое имя для категории "${oldName}"`,
+                placeholder: 'Новое название...',
+                initialValue: oldName,
+                confirmText: 'Сохранить',
+                cancelText: 'Отмена'
+            });
+            if (!newName || newName.trim() === oldName) return;
             try {
                 await api.renameChecklistCategory(gameId, oldName, newName.trim());
                 await loadChecklists(gameId);
@@ -803,7 +825,7 @@ async function loadNotes(gameId: number) {
         el.innerHTML = `
             <div class="text-xs text-blue-400/70 font-medium mb-2">${date}</div>
             <div class="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">${note.text}</div>
-            <button data-id="${note.id}" class="delete-note-btn absolute top-3 right-3 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button data-id="${note.id}" class="delete-note-btn gt-icon-btn gt-icon-btn-danger absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
             </button>
         `;
@@ -854,12 +876,12 @@ async function loadAchievements(gameId: number) {
     container.innerHTML = '';
 
     if (game.sync_type !== 'steam') {
-        container.innerHTML = '<div class="col-span-2 sm:col-span-3 text-gray-500 text-center py-6 text-sm bg-gray-900/50 rounded-xl border border-gray-800">Для Non-Steam игр Steam-достижения недоступны.</div>';
+        container.innerHTML = '<div class="col-span-2 sm:col-span-3"><div class="gt-empty-state">Для Non-Steam игр Steam-достижения недоступны.</div></div>';
         return;
     }
 
     if (achievements.length === 0) {
-        container.innerHTML = '<div class="col-span-2 sm:col-span-3 text-gray-500 text-center py-6 text-sm bg-gray-900/50 rounded-xl border border-gray-800">Достижения не синхронизированы</div>';
+        container.innerHTML = '<div class="col-span-2 sm:col-span-3"><div class="gt-empty-state">Достижения не синхронизированы</div></div>';
         return;
     }
     
@@ -918,7 +940,7 @@ async function loadHistory(gameId: number) {
     container.innerHTML = '';
 
     if (sessions.length === 0) {
-        container.innerHTML = '<div class="text-gray-500 text-xs text-center py-4 italic">Нет истории сессий</div>';
+        container.innerHTML = '<div class="gt-empty-state">Нет истории сессий</div>';
         return;
     }
 
@@ -949,7 +971,7 @@ async function loadHistory(gameId: number) {
             </div>
             <div class="text-right">
                 <div class="text-[10px] text-gray-500 font-bold mb-0.5">+${session.duration_minutes} мин.</div>
-                <div class="text-[9px] px-1.5 py-0.5 rounded bg-black/40 text-gray-600 border border-gray-800 font-bold uppercase tracking-tight capitalize">${isAgent ? 'агент' : (isSteamManual ? 'ручной sync' : session.source)}</div>
+                <div class="gt-badge ${isSteamManual ? 'gt-badge-info' : 'gt-badge-success'}">${isAgent ? 'агент' : (isSteamManual ? 'ручной sync' : session.source)}</div>
             </div>
         `;
         container.appendChild(el);

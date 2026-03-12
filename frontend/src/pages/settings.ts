@@ -15,12 +15,12 @@ export async function mountSettingsModal() {
     panel.className = "gt-panel gt-modal-panel w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto";
 
     panel.innerHTML = `
-            <div class="p-6 border-b border-slate-600/45 flex justify-between items-center bg-slate-900/55 sticky top-0">
-                <h2 class="text-xl font-bold flex items-center gap-3">
+            <div class="gt-modal-header sticky">
+                <h2 class="gt-modal-title">
                     <svg class="w-6 h-6 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     Настройки
                 </h2>
-                <button id="closeSettingsBtn" class="text-slate-400 hover:text-white transition-colors">
+                <button id="closeSettingsBtn" class="gt-modal-close">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
@@ -34,19 +34,19 @@ export async function mountSettingsModal() {
                     </h3>
                     <form id="steamForm" class="space-y-4" novalidate>
                         <div>
-                            <label class="block text-xs font-bold text-slate-300/80 uppercase tracking-widest mb-2">Steam Web API Key</label>
+                            <label class="gt-label">Steam Web API Key</label>
                             <input type="password" id="steamApiKey" class="gt-input text-sm" placeholder="Ваш API Key..." value="${settings.steam_api_key || ''}">
-                            <p class="text-[10px] text-slate-400 mt-2">Получить можно на <a href="https://steamcommunity.com/dev/apikey" target="_blank" class="text-cyan-300 underline">steamcommunity.com/dev/apikey</a></p>
+                            <p class="gt-help">Получить можно на <a href="https://steamcommunity.com/dev/apikey" target="_blank" class="text-cyan-300 underline">steamcommunity.com/dev/apikey</a></p>
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-slate-300/80 uppercase tracking-widest mb-2">Ссылка на профиль Steam</label>
+                            <label class="gt-label">Ссылка на профиль Steam</label>
                             <input type="url" id="steamProfileUrl" class="gt-input text-sm" placeholder="https://steamcommunity.com/id/username/" value="${settings.steam_profile_url || ''}">
-                            <p class="text-[10px] text-slate-400 mt-2">Убедитесь, что профиль <b>открыт</b> в настройках приватности Steam.</p>
+                            <p class="gt-help">Убедитесь, что профиль <b>открыт</b> в настройках приватности Steam.</p>
                         </div>
 
                         <div class="pt-2">
-                            <button type="submit" class="w-full gt-btn gt-btn-primary justify-center py-3">
+                            <button type="submit" class="w-full gt-btn gt-btn-primary gt-btn-lg justify-center">
                                 Сохранить настройки Steam
                             </button>
                         </div>
@@ -60,7 +60,7 @@ export async function mountSettingsModal() {
                         GameTracker Агент
                     </h3>
                     
-                    <div class="mb-4 p-4 bg-slate-900/65 rounded-xl border border-slate-600/45">
+                    <div class="mb-4 gt-surface-card">
                         <p class="text-sm text-slate-300 mb-3">Агент отслеживает запущенные игры и автоматически фиксирует время в разделе "Библиотека". Настройка исполняемого файла доступна только в карточке конкретной игры.</p>
                         <button id="downloadAgentBtn" class="w-full sm:w-auto gt-btn justify-center gap-2 border-lime-300/40 bg-lime-300/20 hover:bg-lime-300/25">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
@@ -68,7 +68,7 @@ export async function mountSettingsModal() {
                         </button>
                     </div>
 
-                    <div class="p-4 bg-slate-900/65 rounded-xl border border-slate-600/45">
+                    <div class="gt-surface-card">
                         <p class="text-sm text-slate-300 mb-2">Токен агента (используется для авторизации агента от вашего аккаунта):</p>
                         <div class="text-xs font-mono text-slate-200 bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 break-all" id="agentTokenValue">${currentAgentToken}</div>
                         <div class="mt-3 flex flex-col sm:flex-row gap-2">

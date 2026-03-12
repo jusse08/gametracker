@@ -5,6 +5,17 @@ from sqlmodel import Session, select
 from database import engine
 from models import Settings
 
+def build_steam_store_image_urls(app_id: int) -> Dict[str, str]:
+    base = f"https://cdn.akamai.steamstatic.com/steam/apps/{app_id}"
+    return {
+        "poster": f"{base}/library_600x900.jpg",
+        "poster2x": f"{base}/library_600x900_2x.jpg",
+        "hero": f"{base}/library_hero.jpg",
+        "hero_blur": f"{base}/library_hero_blur.jpg",
+        "header": f"{base}/header.jpg",
+        "capsule_main": f"{base}/capsule_616x353.jpg",
+    }
+
 def get_steam_settings():
     with Session(engine) as session:
         return session.get(Settings, 1)
@@ -171,10 +182,12 @@ def search_steam_games(query: str) -> List[Dict[str, Any]]:
         results = []
         if data.get("items"):
             for item in data["items"]:
+                cover_urls = build_steam_store_image_urls(item["id"])
                 results.append({
                     "title": item["name"],
                     "steam_app_id": item["id"],
-                    "cover_url": f"https://cdn.akamai.steamstatic.com/steam/apps/{item['id']}/header.jpg",
+                    "cover_url": cover_urls["poster2x"],
+                    "cover_urls": cover_urls,
                     "sync_type": "steam"
                 })
         return results
