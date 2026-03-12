@@ -69,13 +69,7 @@ export function mountAuthModal() {
         btn.disabled = true;
 
         try {
-            const result = await api.login(username, password);
-            console.log('Login result:', result);
-            // Явно сохраняем токен
-            if (result.access_token) {
-                localStorage.setItem('auth_token', result.access_token);
-                console.log('Token saved:', localStorage.getItem('auth_token') ? 'YES' : 'NO');
-            }
+            await api.login(username, password);
             showNotification('Успешный вход!', 'success');
             overlay.remove();
             window.location.hash = '#library';

@@ -119,9 +119,7 @@ function getAuthHeaders(): HeadersInit {
     if (!token) {
         return {};
     }
-    const headers = { 'Authorization': `Bearer ${token}` };
-    console.log('Auth headers:', 'Token present', 'Headers:', headers);
-    return headers;
+    return { 'Authorization': `Bearer ${token}` };
 }
 
 export const api = {
@@ -152,12 +150,8 @@ export const api = {
             body: formData
         });
         const data = await handleResponse<{ access_token: string, token_type: string, user: User }>(res);
-        console.log('Login response:', data);
         if (data.access_token) {
             localStorage.setItem('auth_token', data.access_token);
-            console.log('Token saved to localStorage:', localStorage.getItem('auth_token') ? 'YES' : 'NO');
-            console.log('Token length:', data.access_token.length);
-            console.log('Token starts with:', data.access_token.substring(0, 20));
         }
         return data;
     },
@@ -167,8 +161,6 @@ export const api = {
     },
 
     async getMe(): Promise<User> {
-        const token = getAuthToken();
-        console.log('getMe: token exists:', !!token);
         const res = await fetch(`${API_BASE}/auth/me`, {
             headers: getAuthHeaders()
         });

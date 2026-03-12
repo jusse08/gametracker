@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import JWTError, jwt
-from sqlmodel import Session, select
+import jwt
+from sqlmodel import Session
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import bcrypt
@@ -10,7 +11,7 @@ from database import get_session
 from models import User
 
 # JWT settings
-SECRET_KEY = "your-secret-key-change-in-production"  # TODO: Move to env
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -31,9 +32,9 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -49,23 +50,17 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    print(f"[DEBUG] Token received: {token[:50] if token else 'None'}...")
-    
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id_str = payload.get("sub")
         user_id = int(user_id_str) if user_id_str else None
-        print(f"[DEBUG] Token decoded, user_id: {user_id}")
         if user_id is None:
-            print("[DEBUG] user_id is None")
             raise credentials_exception
-    except JWTError as e:
-        print(f"[DEBUG] JWTError: {e}")
+    except jwt.PyJWTError:
         raise credentials_exception
 
     user = session.get(User, user_id)
     if user is None:
-        print(f"[DEBUG] User {user_id} not found in database")
         raise credentials_exception
 
     return user
