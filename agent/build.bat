@@ -10,7 +10,7 @@ pip install -r requirements.txt
 
 REM Build with PyInstaller
 echo Building executable...
-pyinstaller --onefile --name GameTrackerAgent --icon=NONE --add-data "requirements.txt;." agent.py
+pyinstaller --onefile --noconsole --name GameTrackerAgent --icon=NONE --add-data "requirements.txt;." agent.py
 
 echo.
 echo Build complete! Executable is in dist\GameTrackerAgent.exe

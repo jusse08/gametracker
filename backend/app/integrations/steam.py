@@ -1,9 +1,6 @@
 import requests
 import re
 from typing import List, Dict, Any, Optional
-from sqlmodel import Session, select
-from app.core.database import engine
-from app.domain.models import Settings
 
 def build_steam_store_image_urls(app_id: int) -> Dict[str, str]:
     base = f"https://cdn.akamai.steamstatic.com/steam/apps/{app_id}"
@@ -15,10 +12,6 @@ def build_steam_store_image_urls(app_id: int) -> Dict[str, str]:
         "header": f"{base}/header.jpg",
         "capsule_main": f"{base}/capsule_616x353.jpg",
     }
-
-def get_steam_settings():
-    with Session(engine) as session:
-        return session.get(Settings, 1)
 
 def resolve_steam_id(profile_url: str, api_key: Optional[str] = None) -> Optional[str]:
     """
@@ -42,11 +35,6 @@ def resolve_steam_id(profile_url: str, api_key: Optional[str] = None) -> Optiona
         
         effective_api_key = api_key
         if not effective_api_key:
-            settings = get_steam_settings()
-            if settings:
-                effective_api_key = settings.steam_api_key
-        
-        if not effective_api_key:
             return None
             
         url = "https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/"
@@ -64,15 +52,14 @@ def resolve_steam_id(profile_url: str, api_key: Optional[str] = None) -> Optiona
             
     return None
 
-def sync_steam_achievements(app_id: int) -> List[Dict[str, Any]]:
-    settings = get_steam_settings()
-    if not settings or not settings.steam_api_key or not settings.steam_user_id:
+def sync_steam_achievements(app_id: int, steam_api_key: Optional[str], steam_user_id: Optional[str]) -> List[Dict[str, Any]]:
+    if not steam_api_key or not steam_user_id:
         return []
 
     url = "https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/"
     params = {
-        "key": settings.steam_api_key,
-        "steamid": settings.steam_user_id,
+        "key": steam_api_key,
+        "steamid": steam_user_id,
         "appid": app_id,
         "l": "english"
     }
@@ -103,7 +90,7 @@ def sync_steam_achievements(app_id: int) -> List[Dict[str, Any]]:
         # Optional: Get icons from GetSchemaForGame if needed
         # Fallback to a placeholder icon if icon_url is None
         schema_url = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/"
-        schema_params = {"key": settings.steam_api_key, "appid": app_id}
+        schema_params = {"key": steam_api_key, "appid": app_id}
         schema_res = requests.get(schema_url, params=schema_params, timeout=10)
         schema_data = schema_res.json()
         game_schema = schema_data.get("game", {}).get("availableGameStats", {}).get("achievements", [])
@@ -122,15 +109,14 @@ def sync_steam_achievements(app_id: int) -> List[Dict[str, Any]]:
         print(f"Steam achievements sync error: {e}")
         return []
 
-def fetch_steam_playtime(app_id: int) -> int:
-    settings = get_steam_settings()
-    if not settings or not settings.steam_api_key or not settings.steam_user_id:
+def fetch_steam_playtime(app_id: int, steam_api_key: Optional[str], steam_user_id: Optional[str]) -> int:
+    if not steam_api_key or not steam_user_id:
         return 0
 
     url = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/"
     params = {
-        "key": settings.steam_api_key,
-        "steamid": settings.steam_user_id,
+        "key": steam_api_key,
+        "steamid": steam_user_id,
         "appids_filter[0]": app_id,
         "include_appinfo": 1
     }

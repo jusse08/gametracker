@@ -12,6 +12,7 @@ if TEST_DB_PATH.exists():
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
 os.environ["SUPERADMIN_USERNAME"] = "test_admin"
 os.environ["SUPERADMIN_PASSWORD"] = "test_password_123"
+os.environ["SECRET_KEY"] = "test-secret-key-change-me"
 
 from app.main import app  # noqa: E402
 

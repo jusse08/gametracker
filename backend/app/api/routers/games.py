@@ -494,8 +494,14 @@ def read_game_sessions(
     return session.exec(query).all()
 
 
-def _sync_steam_playtime_manual(session: Session, game_id: int, steam_app_id: int) -> int:
-    steam_playtime = fetch_steam_playtime(steam_app_id)
+def _sync_steam_playtime_manual(
+    session: Session,
+    game_id: int,
+    steam_app_id: int,
+    steam_api_key: Optional[str],
+    steam_user_id: Optional[str],
+) -> int:
+    steam_playtime = fetch_steam_playtime(steam_app_id, steam_api_key, steam_user_id)
     current_playtime_query = select(DbSession.duration_minutes).where(DbSession.game_id == game_id)
     current_total = sum(session.exec(current_playtime_query) or [0])
 
@@ -514,8 +520,14 @@ def _sync_steam_playtime_manual(session: Session, game_id: int, steam_app_id: in
     return diff
 
 
-def _sync_steam_achievements_for_game(session: Session, game_id: int, steam_app_id: int) -> List[Achievement]:
-    achievements_data = sync_steam_achievements(steam_app_id)
+def _sync_steam_achievements_for_game(
+    session: Session,
+    game_id: int,
+    steam_app_id: int,
+    steam_api_key: Optional[str],
+    steam_user_id: Optional[str],
+) -> List[Achievement]:
+    achievements_data = sync_steam_achievements(steam_app_id, steam_api_key, steam_user_id)
     existing_query = select(Achievement).where(Achievement.game_id == game_id)
     existing_achievements = session.exec(existing_query).all()
     existing_map = {a.steam_api_name: a for a in existing_achievements if a.steam_api_name}
@@ -562,7 +574,13 @@ def sync_steam_manual_playtime(
         session.add(game)
         session.commit()
 
-    added_minutes = _sync_steam_playtime_manual(session, game_id, game.steam_app_id)
+    added_minutes = _sync_steam_playtime_manual(
+        session,
+        game_id,
+        game.steam_app_id,
+        current_user.steam_api_key,
+        current_user.steam_user_id,
+    )
     session.commit()
     return {"ok": True, "added_minutes": added_minutes}
 
@@ -583,7 +601,13 @@ def sync_steam_achievements_only(
         session.add(game)
         session.commit()
 
-    new_db_items = _sync_steam_achievements_for_game(session, game_id, game.steam_app_id)
+    new_db_items = _sync_steam_achievements_for_game(
+        session,
+        game_id,
+        game.steam_app_id,
+        current_user.steam_api_key,
+        current_user.steam_user_id,
+    )
     session.commit()
     for db_item in new_db_items:
         session.refresh(db_item)

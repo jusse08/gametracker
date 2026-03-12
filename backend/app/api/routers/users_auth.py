@@ -1,5 +1,8 @@
 from datetime import timedelta
 from typing import List, Optional
+import threading
+import time
+from collections import defaultdict, deque
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -17,6 +20,28 @@ from app.domain.models import User, UserCreate, UserPasswordUpdate, UserRead
 from app.services.common import enrich_user_read, is_superadmin
 
 router = APIRouter()
+
+_LOGIN_WINDOW_SECONDS = 300
+_LOGIN_MAX_ATTEMPTS = 10
+_LOGIN_ATTEMPTS = defaultdict(deque)
+_LOGIN_LOCK = threading.Lock()
+
+
+def _register_login_attempt(username: str) -> int:
+    now = time.time()
+    key = (username or "").strip().lower()
+    with _LOGIN_LOCK:
+        attempts = _LOGIN_ATTEMPTS[key]
+        while attempts and now - attempts[0] > _LOGIN_WINDOW_SECONDS:
+            attempts.popleft()
+        attempts.append(now)
+        return len(attempts)
+
+
+def _clear_login_attempts(username: str) -> None:
+    key = (username or "").strip().lower()
+    with _LOGIN_LOCK:
+        _LOGIN_ATTEMPTS.pop(key, None)
 
 
 @router.get("/api/users", response_model=List[UserRead])
@@ -100,6 +125,13 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_session),
 ):
+    attempt_count = _register_login_attempt(form_data.username)
+    if attempt_count > _LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Try again later.",
+        )
+
     user = session.exec(select(User).where(User.username == form_data.username)).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -107,6 +139,8 @@ def login(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    _clear_login_attempts(form_data.username)
 
     access_token = create_access_token(
         data={"sub": str(user.id)},

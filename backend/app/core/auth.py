@@ -11,7 +11,9 @@ from app.core.database import get_session
 from app.domain.models import User
 
 # JWT settings
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+SECRET_KEY = (os.getenv("SECRET_KEY") or "").strip()
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY is required")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 

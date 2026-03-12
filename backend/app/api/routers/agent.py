@@ -1,15 +1,18 @@
 import os
 import secrets
+import re
+import threading
+import asyncio
 from datetime import datetime, timedelta
 from uuid import uuid4
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, WebSocketException, status
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
 from app.core.auth import get_current_user
-from app.core.database import get_session
+from app.core.database import get_session, engine
 from app.domain.models import AgentConfig, AgentConfigRead, Game, GameRead, Note, NoteCreate, NoteRead, Session as DbSession, User
 from app.domain.schemas import (
     AgentConfigRequest,
@@ -30,22 +33,69 @@ from app.services.common import (
 router = APIRouter()
 AGENT_HEARTBEAT_TIMEOUT_SECONDS = 120
 AGENT_LIVE_HEARTBEAT_TIMEOUT_SECONDS = 6
+WINDOWS_ABS_PATH_RE = re.compile(r"^[A-Za-z]:\\")
 
 
-def get_agent_user(
-    *,
-    session: Session = Depends(get_session),
-    x_agent_token: Optional[str] = Header(default=None, alias="X-Agent-Token"),
-) -> User:
-    if not x_agent_token:
-        raise HTTPException(status_code=401, detail="Missing agent token")
+class AgentWsManager:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._connections: Dict[int, Set[WebSocket]] = {}
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
-    agent_user = session.exec(select(User).where(User.agent_token == x_agent_token)).first()
-    if not agent_user:
-        raise HTTPException(status_code=401, detail="Invalid agent token")
+    def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
 
+    async def connect(self, user_id: int, websocket: WebSocket) -> None:
+        await websocket.accept()
+        with self._lock:
+            self._connections.setdefault(user_id, set()).add(websocket)
+
+    def disconnect(self, user_id: int, websocket: WebSocket) -> None:
+        with self._lock:
+            conns = self._connections.get(user_id)
+            if not conns:
+                return
+            conns.discard(websocket)
+            if not conns:
+                self._connections.pop(user_id, None)
+
+    def _schedule_send(self, user_id: int, payload: Dict[str, Any]) -> None:
+        if not self._loop:
+            return
+        future = asyncio.run_coroutine_threadsafe(self._broadcast(user_id, payload), self._loop)
+        future.add_done_callback(lambda _: None)
+
+    async def _broadcast(self, user_id: int, payload: Dict[str, Any]) -> None:
+        with self._lock:
+            targets = list(self._connections.get(user_id, set()))
+        if not targets:
+            return
+        for ws in targets:
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                self.disconnect(user_id, ws)
+
+    def notify_snapshot(self, user_id: int, items: List[Dict[str, Any]]) -> None:
+        self._schedule_send(user_id, {"type": "config_snapshot", "items": items})
+
+    def notify_commands_updated(self, user_id: int) -> None:
+        self._schedule_send(user_id, {"type": "commands_updated"})
+
+    def disconnect_all(self, user_id: int) -> None:
+        if not self._loop:
+            return
+        with self._lock:
+            targets = list(self._connections.get(user_id, set()))
+        for ws in targets:
+            asyncio.run_coroutine_threadsafe(ws.close(code=1008), self._loop)
+
+
+WS_MANAGER = AgentWsManager()
+
+
+def _touch_agent_heartbeat(session: Session, agent_user: User) -> None:
     now = datetime.utcnow()
-    # Live heartbeat: any authenticated agent request refreshes last_seen.
     if (
         not agent_user.agent_last_seen_at
         or (now - agent_user.agent_last_seen_at).total_seconds() >= 1
@@ -54,15 +104,77 @@ def get_agent_user(
         session.add(agent_user)
         session.commit()
 
+
+def _get_agent_user_by_token(session: Session, token: str) -> User:
+    x_agent_token = (token or "").strip()
+    if not x_agent_token:
+        raise HTTPException(status_code=401, detail="Missing agent token")
+
+    agent_user = session.exec(select(User).where(User.agent_token == x_agent_token)).first()
+    if not agent_user:
+        raise HTTPException(status_code=401, detail="Invalid agent token")
+
+    _touch_agent_heartbeat(session, agent_user)
     return agent_user
 
 
+def get_agent_user(
+    *,
+    session: Session = Depends(get_session),
+    x_agent_token: Optional[str] = Header(default=None, alias="X-Agent-Token"),
+) -> User:
+    return _get_agent_user_by_token(session, x_agent_token or "")
+
+
+def normalize_and_validate_launch_path(launch_path: str) -> str:
+    normalized = (launch_path or "").strip().strip('"')
+    if not normalized:
+        raise HTTPException(status_code=400, detail="launch_path is required")
+    if "\x00" in normalized:
+        raise HTTPException(status_code=400, detail="launch_path contains null byte")
+    if normalized.startswith("\\\\"):
+        raise HTTPException(status_code=400, detail="UNC paths are not allowed")
+    if normalized.startswith("http://") or normalized.startswith("https://"):
+        raise HTTPException(status_code=400, detail="URL launch paths are not allowed")
+    if not WINDOWS_ABS_PATH_RE.match(normalized):
+        raise HTTPException(status_code=400, detail="launch_path must be an absolute Windows path")
+    if not normalized.lower().endswith(".exe"):
+        raise HTTPException(status_code=400, detail="launch_path must point to .exe")
+    return normalized
+
+
 def extract_exe_name(launch_path: str) -> str:
-    normalized = launch_path.replace("\\", "/").strip()
+    normalized = launch_path.replace("\\", "/")
     exe_name = os.path.basename(normalized)
     if not exe_name:
         raise HTTPException(status_code=400, detail="Не удалось определить exe из launch_path")
+    if not exe_name.lower().endswith(".exe"):
+        raise HTTPException(status_code=400, detail="Исполняемый файл должен иметь расширение .exe")
     return exe_name
+
+
+def build_agent_config_items(session: Session, user_id: int) -> List[Dict[str, Any]]:
+    rows = session.exec(
+        select(AgentConfig, Game)
+        .join(Game, AgentConfig.game_id == Game.id)
+        .where(Game.user_id == user_id)
+        .order_by(Game.title.asc())
+    ).all()
+    items: List[Dict[str, Any]] = []
+    for cfg, game in rows:
+        if not cfg.exe_name:
+            continue
+        items.append(
+            {
+                "game_id": cfg.game_id,
+                "title": game.title,
+                "exe_name": cfg.exe_name,
+                "launch_path": cfg.launch_path,
+                "enabled": cfg.enabled,
+                "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
+            }
+        )
+    return items
 
 
 @router.get("/api/agent/token")
@@ -90,7 +202,22 @@ def rotate_agent_token(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
+    WS_MANAGER.disconnect_all(current_user.id)
     return {"ok": True, "agent_token": current_user.agent_token}
+
+
+@router.post("/api/agent/token/rotate/self")
+def rotate_agent_token_self(
+    *,
+    session: Session = Depends(get_session),
+    agent_user: User = Depends(get_agent_user),
+):
+    agent_user.agent_token = secrets.token_urlsafe(32)
+    session.add(agent_user)
+    session.commit()
+    session.refresh(agent_user)
+    WS_MANAGER.disconnect_all(agent_user.id)
+    return {"ok": True, "agent_token": agent_user.agent_token}
 
 
 @router.get("/api/agent/config")
@@ -99,22 +226,32 @@ def get_agent_config(
     session: Session = Depends(get_session),
     agent_user: User = Depends(get_agent_user),
 ):
-    query = (
-        select(AgentConfig)
-        .join(Game, AgentConfig.game_id == Game.id)
-        .where(AgentConfig.enabled == True, Game.user_id == agent_user.id)
-    )
-    configs = session.exec(query).all()
-    return {
-        "items": [
-            {
-                "game_id": cfg.game_id,
-                "exe_name": cfg.exe_name,
-            }
-            for cfg in configs
-            if cfg.exe_name
-        ]
-    }
+    items = [item for item in build_agent_config_items(session, agent_user.id) if item["enabled"]]
+    return {"items": items}
+
+
+@router.websocket("/api/agent/ws")
+async def agent_ws(
+    websocket: WebSocket,
+    token: str = Query(default=""),
+):
+    with Session(engine) as session:
+        try:
+            user = _get_agent_user_by_token(session, token)
+        except HTTPException as exc:
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason=exc.detail)
+
+        WS_MANAGER.bind_loop(asyncio.get_running_loop())
+        await WS_MANAGER.connect(user.id, websocket)
+        await websocket.send_json({"type": "config_snapshot", "items": build_agent_config_items(session, user.id)})
+
+        try:
+            while True:
+                _ = await websocket.receive_text()
+                _touch_agent_heartbeat(session, user)
+                await websocket.send_json({"type": "pong"})
+        except WebSocketDisconnect:
+            WS_MANAGER.disconnect(user.id, websocket)
 
 
 @router.get("/api/agent/commands")
@@ -173,6 +310,7 @@ def ack_agent_command(
     config.updated_at = datetime.utcnow()
     session.add(config)
     session.commit()
+    WS_MANAGER.notify_commands_updated(agent_user.id)
     return {"ok": True, "status": "acknowledged"}
 
 
@@ -381,11 +519,8 @@ def configure_agent(
     req: AgentConfigRequest,
 ):
     game_id = req.game_id
-    launch_path = req.launch_path.strip()
+    launch_path = normalize_and_validate_launch_path(req.launch_path)
     enabled = req.enabled
-
-    if not launch_path:
-        raise HTTPException(status_code=400, detail="launch_path is required")
 
     exe_name = extract_exe_name(launch_path)
 
@@ -404,6 +539,7 @@ def configure_agent(
         session.add(existing)
         session.commit()
         session.refresh(existing)
+        WS_MANAGER.notify_snapshot(current_user.id, build_agent_config_items(session, current_user.id))
         return existing
 
     new_config = AgentConfig(
@@ -415,6 +551,7 @@ def configure_agent(
     session.add(new_config)
     session.commit()
     session.refresh(new_config)
+    WS_MANAGER.notify_snapshot(current_user.id, build_agent_config_items(session, current_user.id))
     return new_config
 
 
@@ -431,7 +568,7 @@ def request_agent_launch(
     if not config or not config.enabled:
         raise HTTPException(status_code=400, detail="Агент не настроен или отключен для этой игры")
 
-    launch_path = (config.launch_path or game.launch_path or "").strip()
+    launch_path = normalize_and_validate_launch_path(config.launch_path or game.launch_path or "")
     if not launch_path:
         raise HTTPException(status_code=400, detail="Сначала сохраните путь к исполняемому файлу игры")
 
@@ -441,6 +578,7 @@ def request_agent_launch(
     config.updated_at = datetime.utcnow()
     session.add(config)
     session.commit()
+    WS_MANAGER.notify_commands_updated(current_user.id)
 
     return {
         "ok": True,
@@ -464,4 +602,5 @@ def delete_agent_config(
 
     session.delete(config)
     session.commit()
+    WS_MANAGER.notify_snapshot(current_user.id, build_agent_config_items(session, current_user.id))
     return {"ok": True}
