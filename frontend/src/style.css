@@ -401,6 +401,113 @@ body::after {
     padding: 1.5rem;
 }
 
+.game-hero-controls {
+    width: 248px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.58rem;
+}
+
+.game-hero-hours {
+    width: 100%;
+    text-align: right;
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1.1;
+    color: #62c2ff;
+    text-shadow: 0 0 26px rgba(45, 161, 255, 0.32);
+}
+
+.game-hero-hours > span {
+    font-size: 2.55rem;
+}
+
+.game-hero-stars-wide {
+    width: 100%;
+    min-height: 2.7rem;
+    border-radius: 0.78rem;
+    border: 1px solid rgba(128, 147, 183, 0.3);
+    background: rgba(14, 23, 40, 0.65);
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    overflow: hidden;
+}
+
+.game-hero-stars-wide .rate-star-static {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.32rem;
+    line-height: 1;
+    min-height: 2.7rem;
+    border-right: 1px solid rgba(100, 120, 154, 0.26);
+}
+
+.game-hero-stars-wide .rate-star-static:last-child {
+    border-right: 0;
+}
+
+.game-hero-actions-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+}
+
+.game-hero-play-btn {
+    min-height: 2.7rem;
+    border-radius: 0.68rem;
+    border: 1px solid rgba(144, 173, 220, 0.44);
+    background: rgba(106, 136, 188, 0.26);
+    color: #eef6ff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.game-hero-play-btn:hover {
+    border-color: rgba(160, 186, 229, 0.56);
+    background: rgba(132, 156, 200, 0.28);
+    box-shadow: 0 8px 18px rgba(7, 15, 30, 0.45);
+}
+
+.game-hero-delete-btn {
+    width: 2.7rem;
+    min-height: 2.7rem;
+    border-radius: 0.68rem;
+    border: 1px solid rgba(255, 93, 123, 0.42);
+    background: rgba(255, 93, 123, 0.12);
+    color: #ffb4c1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.game-hero-delete-btn:hover {
+    border-color: rgba(255, 128, 155, 0.62);
+    background: rgba(255, 93, 123, 0.2);
+    color: #ffd2dc;
+    box-shadow: 0 8px 18px rgba(42, 8, 16, 0.45);
+}
+
+.rate-star-static {
+    color: rgba(108, 128, 163, 0.72);
+    transition: color 0.18s ease;
+    cursor: pointer;
+}
+
+.rate-star-static:hover {
+    color: #ffe29a;
+}
+
+.rate-star-static.is-active {
+    color: #ffd579;
+}
+
 .gt-icon-btn {
     width: 2rem;
     height: 2rem;
@@ -588,12 +695,27 @@ body::after {
     box-shadow: 0 0 0 1px rgba(20, 212, 255, 0.14), 0 8px 20px rgba(2, 10, 29, 0.55);
 }
 
+.quest-category-wrap {
+    width: auto;
+    flex: 1 1 auto;
+}
+
 .gt-select {
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%239feeff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.7rem center;
     padding-right: 2.4rem;
+}
+
+.gt-select option {
+    background: #0b1528;
+    color: #e8f4ff;
+}
+
+.gt-select option:checked {
+    background: #1f5fbf;
+    color: #f5fbff;
 }
 
 .library-sort-wrap.is-open .library-sort-btn {
@@ -923,6 +1045,66 @@ body::after {
     to {
         background-position: -100% 0;
     }
+}
+
+.gt-notes-scroll,
+.gt-notes-textarea {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(20, 212, 255, 0.58) rgba(9, 17, 31, 0.78);
+}
+
+.gt-notes-scroll::-webkit-scrollbar,
+.gt-notes-textarea::-webkit-scrollbar {
+    width: 10px;
+}
+
+.gt-notes-scroll::-webkit-scrollbar-track,
+.gt-notes-textarea::-webkit-scrollbar-track {
+    border-radius: 999px;
+    border: 1px solid rgba(103, 122, 161, 0.28);
+    background: linear-gradient(180deg, rgba(10, 18, 33, 0.9), rgba(8, 14, 27, 0.9));
+}
+
+.gt-notes-scroll::-webkit-scrollbar-thumb,
+.gt-notes-textarea::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    border: 2px solid rgba(9, 17, 31, 0.85);
+    background: linear-gradient(180deg, rgba(20, 212, 255, 0.75), rgba(16, 140, 255, 0.66));
+    box-shadow: inset 0 0 0 1px rgba(184, 244, 255, 0.25);
+}
+
+.gt-notes-scroll::-webkit-scrollbar-thumb:hover,
+.gt-notes-textarea::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(86, 232, 255, 0.88), rgba(33, 166, 255, 0.8));
+}
+
+html,
+body,
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(20, 212, 255, 0.58) rgba(9, 17, 31, 0.78);
+}
+
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+    border-radius: 999px;
+    border: 1px solid rgba(103, 122, 161, 0.28);
+    background: linear-gradient(180deg, rgba(10, 18, 33, 0.9), rgba(8, 14, 27, 0.9));
+}
+
+*::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    border: 2px solid rgba(9, 17, 31, 0.85);
+    background: linear-gradient(180deg, rgba(20, 212, 255, 0.75), rgba(16, 140, 255, 0.66));
+    box-shadow: inset 0 0 0 1px rgba(184, 244, 255, 0.25);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(86, 232, 255, 0.88), rgba(33, 166, 255, 0.8));
 }
 
 @media (max-width: 1024px) {

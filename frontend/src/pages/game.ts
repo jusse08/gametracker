@@ -28,6 +28,7 @@ async function openQuestActionsModal(gameId: number, onDataChanged: () => Promis
 
     const categories = await api.getChecklistCategories(gameId);
     let activeMode: 'task' | 'category' | 'wiki' = categories.length > 0 ? 'task' : 'category';
+    let selectedTaskCategory = categories[0]?.name || '';
 
     const overlay = document.createElement('div');
     overlay.className = 'gt-modal-overlay';
@@ -49,8 +50,16 @@ async function openQuestActionsModal(gameId: number, onDataChanged: () => Promis
 
     const renderBody = () => {
         const hasCategories = categories.length > 0;
-        const categoryOptions = categories
-            .map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`)
+        if (hasCategories && !categories.some((c) => c.name === selectedTaskCategory)) {
+            selectedTaskCategory = categories[0].name;
+        }
+
+        const categoryOptionButtons = categories
+            .map((c) => {
+                const safeName = escapeHtml(c.name);
+                const isActive = c.name === selectedTaskCategory;
+                return `<button type="button" class="library-sort-option ${isActive ? 'is-active' : ''}" data-value="${safeName}" role="option" aria-selected="${isActive ? 'true' : 'false'}">${safeName}</button>`;
+            })
             .join('');
 
         modal.innerHTML = `
@@ -60,32 +69,38 @@ async function openQuestActionsModal(gameId: number, onDataChanged: () => Promis
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            <div class="p-6 bg-slate-900/35 space-y-5 overflow-y-auto">
+            <div class="p-6 bg-slate-900/35 overflow-y-auto flex flex-col gap-5">
                 <div class="grid grid-cols-3 gap-2">
                     <button data-mode="task" class="quest-mode-btn px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${activeMode === 'task' ? 'border-emerald-300/60 bg-emerald-300/20 text-emerald-100' : 'border-slate-600/45 bg-slate-900/60 text-slate-300 hover:bg-slate-800/70'}">Задача</button>
                     <button data-mode="category" class="quest-mode-btn px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${activeMode === 'category' ? 'border-indigo-300/60 bg-indigo-300/20 text-indigo-100' : 'border-slate-600/45 bg-slate-900/60 text-slate-300 hover:bg-slate-800/70'}">Категория</button>
                     <button data-mode="wiki" class="quest-mode-btn px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${activeMode === 'wiki' ? 'border-cyan-300/60 bg-cyan-300/20 text-cyan-100' : 'border-slate-600/45 bg-slate-900/60 text-slate-300 hover:bg-slate-800/70'}">Импорт Wiki</button>
                 </div>
 
-                <div id="questModeTask" class="${activeMode === 'task' ? '' : 'hidden'} space-y-3">
+                <div id="questModeTask" class="${activeMode === 'task' ? '' : 'hidden'} flex flex-col gap-3">
                     ${!hasCategories ? '<div class="text-xs text-amber-300 bg-amber-900/20 border border-amber-700/40 px-3 py-2 rounded-lg">Сначала создайте хотя бы одну категорию.</div>' : ''}
                     <input id="questModalTaskTitle" type="text" class="gt-input text-sm" placeholder="Новая задача / миссия..." ${hasCategories ? '' : 'disabled'}>
-                    <div class="flex gap-2">
-                        <select id="questModalTaskCategory" class="gt-input gt-select text-sm flex-grow" ${hasCategories ? '' : 'disabled'}>
-                            ${categoryOptions}
-                        </select>
-                        <button id="questModalCreateTaskBtn" class="gt-btn gt-btn-primary px-5 ${hasCategories ? '' : 'opacity-50 cursor-not-allowed'}" ${hasCategories ? '' : 'disabled'}>Добавить</button>
+                    <div class="flex items-stretch gap-2">
+                        <div id="questModalTaskCategoryWrap" class="library-sort-wrap quest-category-wrap ${hasCategories ? '' : 'opacity-50 pointer-events-none'}">
+                            <button id="questModalTaskCategoryBtn" type="button" class="library-sort-btn" aria-haspopup="listbox" aria-expanded="false" ${hasCategories ? '' : 'disabled'}>
+                                <span id="questModalTaskCategoryLabel">${escapeHtml(selectedTaskCategory || 'Выберите категорию')}</span>
+                                <svg class="library-sort-caret w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="questModalTaskCategoryMenu" class="library-sort-menu" role="listbox" aria-label="Категория задачи">
+                                ${categoryOptionButtons}
+                            </div>
+                        </div>
+                        <button id="questModalCreateTaskBtn" class="gt-btn gt-btn-primary h-11 px-5 ${hasCategories ? '' : 'opacity-50 cursor-not-allowed'}" ${hasCategories ? '' : 'disabled'}>Добавить</button>
                     </div>
                 </div>
 
-                <div id="questModeCategory" class="${activeMode === 'category' ? '' : 'hidden'} space-y-3">
+                <div id="questModeCategory" class="${activeMode === 'category' ? '' : 'hidden'} flex flex-col gap-3">
                     <input id="questModalCategoryName" type="text" class="gt-input text-sm" placeholder="Название категории...">
-                    <button id="questModalCreateCategoryBtn" class="gt-btn px-5 border-indigo-300/45 bg-indigo-300/20 text-indigo-100 hover:bg-indigo-300/30">Создать категорию</button>
+                    <button id="questModalCreateCategoryBtn" class="gt-btn h-11 px-5 border-indigo-300/45 bg-indigo-300/20 text-indigo-100 hover:bg-indigo-300/30">Создать категорию</button>
                 </div>
 
-                <div id="questModeWiki" class="${activeMode === 'wiki' ? '' : 'hidden'} space-y-3">
+                <div id="questModeWiki" class="${activeMode === 'wiki' ? '' : 'hidden'} flex flex-col gap-3">
                     <input id="questModalWikiUrl" type="url" class="gt-input text-sm" placeholder="Ссылка на Wiki (URL)...">
-                    <button id="questModalImportWikiBtn" class="gt-btn px-5 border-cyan-300/45 bg-cyan-300/20 text-cyan-100 hover:bg-cyan-300/30">Импортировать</button>
+                    <button id="questModalImportWikiBtn" class="gt-btn h-11 px-5 border-cyan-300/45 bg-cyan-300/20 text-cyan-100 hover:bg-cyan-300/30">Импортировать</button>
                 </div>
             </div>
         `;
@@ -99,12 +114,41 @@ async function openQuestActionsModal(gameId: number, onDataChanged: () => Promis
             });
         });
 
+        const categoryWrap = modal.querySelector<HTMLElement>('#questModalTaskCategoryWrap');
+        const categoryBtn = modal.querySelector<HTMLButtonElement>('#questModalTaskCategoryBtn');
+        const categoryLabel = modal.querySelector<HTMLElement>('#questModalTaskCategoryLabel');
+        const categoryMenu = modal.querySelector<HTMLElement>('#questModalTaskCategoryMenu');
+        const closeCategoryMenu = () => {
+            if (!categoryWrap || !categoryBtn) return;
+            categoryWrap.classList.remove('is-open');
+            categoryBtn.setAttribute('aria-expanded', 'false');
+        };
+
+        categoryBtn?.addEventListener('click', () => {
+            if (!categoryWrap) return;
+            const isOpen = categoryWrap.classList.toggle('is-open');
+            categoryBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+
+        categoryMenu?.querySelectorAll<HTMLButtonElement>('.library-sort-option').forEach((option) => {
+            option.addEventListener('click', () => {
+                selectedTaskCategory = option.dataset.value || '';
+                if (categoryLabel) categoryLabel.textContent = selectedTaskCategory;
+                categoryMenu.querySelectorAll('.library-sort-option').forEach((el) => {
+                    el.classList.remove('is-active');
+                    el.setAttribute('aria-selected', 'false');
+                });
+                option.classList.add('is-active');
+                option.setAttribute('aria-selected', 'true');
+                closeCategoryMenu();
+            });
+        });
+
         modal.querySelector('#questModalCreateTaskBtn')?.addEventListener('click', async () => {
             const titleInput = modal.querySelector<HTMLInputElement>('#questModalTaskTitle');
-            const categoryInput = modal.querySelector<HTMLSelectElement>('#questModalTaskCategory');
-            if (!titleInput || !categoryInput) return;
+            if (!titleInput) return;
             const title = titleInput.value.trim();
-            const category = categoryInput.value.trim();
+            const category = selectedTaskCategory.trim();
             if (!title) {
                 titleInput.focus();
                 showNotification('Введите название задачи.', 'info');
@@ -141,6 +185,7 @@ async function openQuestActionsModal(gameId: number, onDataChanged: () => Promis
                 showNotification('Категория создана', 'success');
                 const refreshed = await api.getChecklistCategories(gameId);
                 categories.splice(0, categories.length, ...refreshed);
+                selectedTaskCategory = refreshed[0]?.name || '';
                 activeMode = 'task';
                 renderBody();
             } catch (err: any) {
@@ -186,6 +231,111 @@ async function openQuestActionsModal(gameId: number, onDataChanged: () => Promis
     renderBody();
 }
 
+async function openAgentSettingsModal(
+    gameId: number,
+    currentLaunchPath: string,
+    onPingCompleted: () => Promise<void>,
+    onSaved: () => Promise<void>
+) {
+    const root = document.getElementById('modal-root');
+    if (!root) {
+        showNotification('Модальное окно недоступно.', 'error');
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'gt-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'gt-panel gt-modal-panel rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]';
+    overlay.appendChild(modal);
+    root.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+        overlay.classList.add('is-open');
+        modal.classList.add('is-open');
+    });
+
+    const closeModal = () => {
+        overlay.classList.remove('is-open');
+        modal.classList.remove('is-open');
+        setTimeout(() => overlay.remove(), 240);
+    };
+
+    modal.innerHTML = `
+        <div class="gt-modal-header">
+            <div>
+                <h2 class="gt-modal-title text-2xl">Настройки агента</h2>
+                <p class="text-sm text-gray-400 mt-1">Укажите полный путь к exe-файлу. Агент отслеживает реальные игровые сессии.</p>
+            </div>
+            <button id="agentModalCloseBtn" class="gt-modal-close">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-6 bg-slate-900/35 overflow-y-auto flex flex-col gap-4">
+            <div class="text-xs text-gray-300 bg-gray-950/80 border border-gray-700 rounded-lg px-3 py-2 break-all">
+                ${currentLaunchPath ? `Текущий PATH: ${escapeHtml(currentLaunchPath)}` : 'Путь пока не задан'}
+            </div>
+            <input id="agentModalLaunchPathInput" type="text" value="${escapeHtml(currentLaunchPath)}" placeholder="C:\\Games\\Game\\game.exe" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all placeholder-gray-500">
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button id="agentModalSaveBtn" class="gt-btn h-11 px-5 border-emerald-300/45 bg-emerald-300/20 text-emerald-100 hover:bg-emerald-300/30">Сохранить путь</button>
+                <button id="agentModalTestBtn" class="gt-btn h-11 px-5 border-blue-300/45 bg-blue-300/20 text-blue-100 hover:bg-blue-300/30">Проверить агент</button>
+            </div>
+        </div>
+    `;
+
+    modal.querySelector('#agentModalCloseBtn')?.addEventListener('click', closeModal);
+
+    modal.querySelector('#agentModalSaveBtn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget as HTMLButtonElement;
+        const input = modal.querySelector<HTMLInputElement>('#agentModalLaunchPathInput');
+        if (!input) return;
+        const launchPath = input.value.trim();
+        if (!launchPath) {
+            showNotification('Введите путь к exe-файлу.', 'info');
+            input.focus();
+            return;
+        }
+
+        const originalText = btn.textContent;
+        btn.textContent = 'Сохранение...';
+        btn.disabled = true;
+        try {
+            await api.configureAgent(gameId, launchPath, true);
+            showNotification('Настройки агента сохранены.', 'success');
+            closeModal();
+            await onSaved();
+        } catch (err: any) {
+            showNotification(err.message || 'Ошибка настройки агента.', 'error');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    });
+
+    modal.querySelector('#agentModalTestBtn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget as HTMLButtonElement;
+        const originalText = btn.textContent;
+        btn.textContent = 'Проверка...';
+        btn.disabled = true;
+        try {
+            const result = await api.testAgentPing(gameId);
+            showNotification(result.message, result.ok ? 'success' : 'info');
+            await onPingCompleted();
+        } catch (err: any) {
+            showNotification(err.message || 'Ошибка проверки связи с агентом.', 'error');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeModal();
+        }
+    });
+}
+
 export async function renderGamePage(container: HTMLElement, gameId: number) {
     container.innerHTML = `
         <div class="flex items-center justify-center min-h-[50vh]">
@@ -224,46 +374,33 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                             </button>
             `
             : '';
-        const agentPanel = `
-                    <div class="gt-section-card">
-                        <div class="flex items-start justify-between gap-4 mb-4">
-                            <div>
-                                <h2 class="text-xl font-bold flex items-center gap-2">
-                                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                                    Настройка агента
-                                </h2>
-                                <p class="text-sm text-gray-400 mt-1">Укажите полный путь к exe-файлу. Агент ведет реальные игровые сессии для Steam и Non-Steam игр.</p>
-                            </div>
-                            <span class="text-xs text-gray-500 bg-gray-900/70 border border-gray-700 rounded-lg px-3 py-1.5">${game.launch_path ? `PATH: ${game.launch_path}` : 'Путь не задан'}</span>
-                        </div>
-                        <div class="flex flex-col sm:flex-row gap-3">
-                            <input id="agentLaunchPathInput" type="text" value="${game.launch_path || ''}" placeholder="C:\\Games\\Game\\game.exe" class="flex-grow bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all placeholder-gray-500">
-                            <button id="saveAgentConfigBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-3 rounded-xl transition-colors">Сохранить путь</button>
-                            <button id="testAgentBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-3 rounded-xl transition-colors">Проверить агент</button>
-                        </div>
-                    </div>
-            `;
         
         container.innerHTML = `
             <!-- Top Hero Banner -->
-            <div class="relative w-full h-64 md:h-80 lg:h-96 rounded-3xl overflow-hidden mb-8 shadow-2xl ring-1 ring-white/10 group">
+            <div class="relative w-full h-64 md:h-80 lg:h-96 rounded-3xl overflow-hidden mb-8 shadow-2xl ring-1 ring-white/10">
                 <!-- Blurred background image -->
                 <div class="absolute inset-0 z-0">
                     <img src="${heroCover}" class="w-full h-full object-cover opacity-30 blur-xl scale-110 object-top" onerror="if(!this.dataset.fallback && '${heroFallback}'){this.dataset.fallback='1';this.src='${heroFallback}';}" />
                 </div>
                 <!-- Gradient overlay -->
                 <div class="absolute inset-0 z-10 bg-gradient-to-t from-gray-900 via-gray-900/80 to-transparent"></div>
-                
-                <div class="absolute inset-0 z-20 flex items-end p-6 md:p-10">
-                    <div class="flex flex-col md:flex-row items-start md:items-end gap-6 w-full">
+
+                <div class="absolute inset-0 z-20 flex items-center p-6 md:p-10">
+                    <div class="flex flex-col md:flex-row items-start md:items-center gap-6 w-full">
                         <!-- Cover Image shadow-drop -->
-                        <div class="w-32 md:w-48 lg:w-56 aspect-[3/4] rounded-xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] ring-1 ring-white/20 shrink-0 transform group-hover:-translate-y-2 transition-transform duration-500">
+                        <div class="w-32 md:w-48 lg:w-56 aspect-[3/4] rounded-xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] ring-1 ring-white/20 shrink-0 md:self-center">
                             <img src="${cover}" alt="${game.title}" class="w-full h-full object-cover" onerror="if(!this.dataset.fallback && '${coverFallback}'){this.dataset.fallback='1';this.src='${coverFallback}';}" />
                         </div>
                         
-                        <div class="flex-grow pb-2 w-full">
-                            <div class="flex justify-between items-start w-full">
-                                <div>
+                        <div class="flex-grow w-full">
+                            <div class="relative w-full md:min-h-[256px] lg:min-h-[300px]">
+                                <button id="openAgentSettingsBtn" class="hidden md:inline-flex absolute top-0 right-0 z-20 items-center gap-2 rounded-xl border border-cyan-300/40 bg-cyan-300/16 px-3 py-2 text-xs font-semibold text-cyan-100 transition-colors hover:bg-cyan-300/28 hover:border-cyan-200/60">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317a1 1 0 011.35-.936l1.39.695a1 1 0 00.82 0l1.39-.695a1 1 0 011.35.936l.188 1.529a1 1 0 00.57.78l1.39.695a1 1 0 01.287 1.598l-1.03 1.153a1 1 0 000 1.333l1.03 1.153a1 1 0 01-.287 1.598l-1.39.695a1 1 0 00-.57.78l-.188 1.529a1 1 0 01-1.35.936l-1.39-.695a1 1 0 00-.82 0l-1.39.695a1 1 0 01-1.35-.936l-.188-1.529a1 1 0 00-.57-.78l-1.39-.695a1 1 0 01-.287-1.598l1.03-1.153a1 1 0 000-1.333L4.95 9.981a1 1 0 01.287-1.598l1.39-.695a1 1 0 00.57-.78l.188-1.529z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15a3 3 0 100-6 3 3 0 000 6z"></path></svg>
+                                    <span>Настройки агента</span>
+                                </button>
+
+                                <div class="md:absolute md:inset-y-0 md:left-0 md:right-[272px] flex md:items-center">
+                                    <div>
                                     <div class="flex flex-wrap gap-2 mb-3">
                                         <span class="gt-badge gt-badge-info">
                                             ${statusLabel(game.status)}
@@ -276,20 +413,21 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                                         ${(game.genres || []).length === 0 ? '<span class="text-[11px] text-gray-400">Жанры не найдены</span>' : ''}
                                     </div>
                                 </div>
-                                <div class="hidden md:flex flex-col items-end backdrop-blur-md bg-black/30 p-4 rounded-2xl border border-white/10 shadow-xl">
-                                    <span class="text-gray-400 text-sm font-medium mb-1">Сыграно времени</span>
-                                    <span class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400"><span id="playtimeHero">${(game.total_playtime_minutes / 60).toFixed(1)}</span> <span class="text-xl text-gray-500 font-normal">часов</span></span>
-                                    <div id="ratingStarsDesktop" class="mt-3 flex items-center gap-1">
+                                </div>
+
+                                <div class="hidden md:flex game-hero-controls absolute right-0 bottom-0">
+                                    <div class="game-hero-hours"><span id="playtimeHero">${(game.total_playtime_minutes / 60).toFixed(1)}</span> часов</div>
+                                    <div id="ratingStarsDesktop" class="game-hero-stars-wide">
                                         ${[1, 2, 3, 4, 5].map((star) => `
-                                            <button type="button" class="rate-star text-lg ${star <= (game.personal_rating || 0) ? 'text-amber-300' : 'text-gray-600 hover:text-amber-200'}" data-value="${star}" title="Оценка ${star} из 5">★</button>
+                                            <button type="button" class="rate-star rate-star-static ${star <= (game.personal_rating || 0) ? 'is-active' : ''}" data-value="${star}" title="Оценка ${star} из 5">★</button>
                                         `).join('')}
                                     </div>
-                                    <div class="mt-4 flex gap-2 w-full">
-                                        <button id="playGameBtn" class="flex-grow bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/10 px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-2">
+                                    <div class="game-hero-actions-row">
+                                        <button id="playGameBtn" class="game-hero-play-btn">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                             Играть
                                         </button>
-                                        <button id="deleteGameBtn" class="gt-icon-btn gt-icon-btn-danger w-11 h-10" title="Удалить игру">
+                                        <button id="deleteGameBtn" class="game-hero-delete-btn" title="Удалить игру">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                         </button>
                                     </div>
@@ -304,7 +442,6 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-12">
                 <!-- Main Content (Left, spans 2) -->
                 <div class="lg:col-span-2 space-y-8">
-                    ${agentPanel}
                     <!-- Progress Section -->
                     <div class="gt-section-card">
                         <div class="flex justify-between items-center mb-6">
@@ -337,16 +474,16 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
 
                     ${game.sync_type === 'steam' ? `
                     <!-- Achievements Section -->
-                    <div class="gt-section-card flex flex-col min-h-[250px] relative overflow-hidden group">
-                        <div class="absolute inset-0 bg-gradient-to-br from-blue-900/10 to-purple-900/10 z-0"></div>
-                        <div class="relative z-10 flex justify-between items-center mb-6">
-                            <h3 class="text-xl font-bold text-gray-300 flex items-center gap-2">
+                    <div class="gt-section-card">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-2xl font-bold flex items-center gap-2">
                                 <svg class="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
                                 ${achievementsTitle}
-                            </h3>
+                            </h2>
                             ${achievementsAction}
                         </div>
-                        <div class="relative z-10 mb-5">
+
+                        <div class="space-y-4 mb-8">
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-sm text-gray-300">Прогресс достижений</span>
                                 <span id="achievementProgressText" class="text-xs font-medium text-gray-400 bg-gray-900 px-2.5 py-1 rounded-full border border-gray-700">0%</span>
@@ -355,7 +492,8 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                                 <div id="achievementProgressBar" class="bg-gradient-to-r from-amber-500 to-yellow-400 h-3 rounded-full transition-all duration-1000 w-[0%]"></div>
                             </div>
                         </div>
-                        <div id="achievementsContainer" class="relative z-10 grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[300px] pr-2 scrollbar-thin scrollbar-thumb-gray-700">
+
+                        <div id="achievementsContainer" class="grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[300px] pr-2 scrollbar-thin scrollbar-thumb-gray-700">
                             <!-- empty / loaded content -->
                             <div class="gt-skeleton-block h-20 col-span-2 sm:col-span-3"></div>
                         </div>
@@ -372,7 +510,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                             <div id="playtimeMobile" class="text-xl font-bold">${(game.total_playtime_minutes / 60).toFixed(1)} ч.</div>
                             <div id="ratingStarsMobile" class="mt-2 flex items-center justify-center gap-1">
                                 ${[1, 2, 3, 4, 5].map((star) => `
-                                    <button type="button" class="rate-star text-base ${star <= (game.personal_rating || 0) ? 'text-amber-300' : 'text-gray-600 hover:text-amber-200'}" data-value="${star}" title="Оценка ${star} из 5">★</button>
+                                    <button type="button" class="rate-star rate-star-static text-base ${star <= (game.personal_rating || 0) ? 'is-active' : ''}" data-value="${star}" title="Оценка ${star} из 5">★</button>
                                 `).join('')}
                             </div>
                         </div>
@@ -407,14 +545,14 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                             Дневник / Заметки
                         </h2>
                         
-                        <div id="notesContainer" class="flex-grow overflow-y-auto pr-2 space-y-4 mb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                        <div id="notesContainer" class="gt-notes-scroll flex-grow overflow-y-auto pr-2 space-y-4 mb-4">
                             <div class="gt-skeleton-block h-20 mb-3"></div>
                         </div>
 
                         <form id="addNoteForm" class="mt-auto relative" novalidate>
-                            <textarea id="newNoteText" rows="3" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-500 resize-none pb-12" placeholder="Добавьте мысль, решение загадки..." required></textarea>
-                            <button type="submit" class="absolute bottom-3 right-3 bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors">
-                                <svg class="w-4 h-4" transform="rotate(45)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                            <textarea id="newNoteText" rows="3" class="gt-notes-textarea w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 pr-14 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-500 resize-none" placeholder="Добавьте мысль, решение загадки..." required></textarea>
+                            <button type="submit" class="absolute top-3 right-3 w-9 h-9 inline-flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+                                <svg class="w-4 h-4 -rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
                             </button>
                         </form>
                     </div>
@@ -466,6 +604,17 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             }
         });
 
+        const refreshPlaytimeAndHistory = async () => {
+            const updatedGame = await api.getGame(gameId);
+            game = updatedGame;
+            const heroEl = document.getElementById('playtimeHero');
+            const mobileEl = document.getElementById('playtimeMobile');
+            const playtimeHours = (updatedGame.total_playtime_minutes / 60).toFixed(1);
+            if (heroEl) heroEl.innerText = playtimeHours;
+            if (mobileEl) mobileEl.innerText = `${playtimeHours} ч.`;
+            await loadHistory(gameId);
+        };
+
         document.getElementById('syncSteamManualBtn')?.addEventListener('click', async (e) => {
             const btn = e.currentTarget as HTMLButtonElement;
             const originalHTML = btn.innerHTML;
@@ -473,15 +622,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             btn.disabled = true;
             try {
                 const result = await api.syncSteamManual(gameId);
-                const updatedGame = await api.getGame(gameId);
-                const heroEl = document.getElementById('playtimeHero');
-                const mobileEl = document.getElementById('playtimeMobile');
-                const playtimeHours = (updatedGame.total_playtime_minutes / 60).toFixed(1);
-
-                if (heroEl) heroEl.innerText = playtimeHours;
-                if (mobileEl) mobileEl.innerText = `${playtimeHours} ч.`;
-
-                await loadHistory(gameId);
+                await refreshPlaytimeAndHistory();
                 if (result.added_minutes > 0) {
                     showNotification(`Добавлено ${result.added_minutes} мин. из Steam`, 'success');
                 } else {
@@ -495,53 +636,16 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             }
         });
 
-        document.getElementById('saveAgentConfigBtn')?.addEventListener('click', async (e) => {
-            const btn = e.currentTarget as HTMLButtonElement;
-            const input = document.getElementById('agentLaunchPathInput') as HTMLInputElement;
-            const launchPath = input.value.trim();
-
-            if (!launchPath) {
-                showNotification('Введите путь к exe-файлу.', 'info');
-                return;
-            }
-
-            const originalText = btn.textContent;
-            btn.textContent = 'Сохранение...';
-            btn.disabled = true;
+        document.getElementById('openAgentSettingsBtn')?.addEventListener('click', async () => {
             try {
-                await api.configureAgent(gameId, launchPath, true);
-                await renderGamePage(container, gameId);
+                await openAgentSettingsModal(
+                    gameId,
+                    game.launch_path || '',
+                    refreshPlaytimeAndHistory,
+                    async () => renderGamePage(container, gameId)
+                );
             } catch (err: any) {
-                showNotification(err.message || 'Ошибка настройки агента.', 'error');
-            } finally {
-                btn.textContent = originalText;
-                btn.disabled = false;
-            }
-        });
-
-        document.getElementById('testAgentBtn')?.addEventListener('click', async (e) => {
-            const btn = e.currentTarget as HTMLButtonElement;
-            const originalText = btn.textContent;
-            btn.textContent = 'Проверка...';
-            btn.disabled = true;
-
-            try {
-                const result = await api.testAgentPing(gameId);
-                showNotification(result.message, result.ok ? 'success' : 'info');
-                const updatedGame = await api.getGame(gameId);
-                const heroEl = document.getElementById('playtimeHero');
-                const mobileEl = document.getElementById('playtimeMobile');
-                const playtimeHours = (updatedGame.total_playtime_minutes / 60).toFixed(1);
-
-                if (heroEl) heroEl.innerText = playtimeHours;
-                if (mobileEl) mobileEl.innerText = `${playtimeHours} ч.`;
-
-                await loadHistory(gameId);
-            } catch (err: any) {
-                showNotification(err.message || 'Ошибка проверки связи с агентом.', 'error');
-            } finally {
-                btn.textContent = originalText;
-                btn.disabled = false;
+                showNotification(err?.message || 'Не удалось открыть настройки агента.', 'error');
             }
         });
 
@@ -555,8 +659,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                     container.querySelectorAll('.rate-star').forEach((btn) => {
                         const button = btn as HTMLButtonElement;
                         const buttonValue = Number(button.getAttribute('data-value') || '0');
-                        button.classList.toggle('text-amber-300', buttonValue <= currentRating);
-                        button.classList.toggle('text-gray-600', buttonValue > currentRating);
+                        button.classList.toggle('is-active', buttonValue <= currentRating);
                     });
                     showNotification(`Оценка: ${value} из 5`, 'success');
                 } catch (err: any) {
@@ -565,9 +668,19 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             });
         });
 
-        document.getElementById('addNoteForm')?.addEventListener('submit', async (e) => {
+        const addNoteForm = document.getElementById('addNoteForm') as HTMLFormElement | null;
+        const noteTextInput = document.getElementById('newNoteText') as HTMLTextAreaElement | null;
+
+        noteTextInput?.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
             e.preventDefault();
-            const textInput = document.getElementById('newNoteText') as HTMLTextAreaElement;
+            addNoteForm?.requestSubmit();
+        });
+
+        addNoteForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const textInput = noteTextInput;
+            if (!textInput) return;
             const noteText = textInput.value.trim();
             if (!noteText) {
                 showNotification('Введите текст заметки.', 'info');
