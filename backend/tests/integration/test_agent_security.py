@@ -124,3 +124,65 @@ def test_agent_pair_refresh_and_revoke_flow(client: TestClient, auth_headers: di
         json={"device_id": device_id, "refresh_token": refreshed["refresh_token"]},
     )
     assert refresh_after_revoke.status_code == 401, refresh_after_revoke.text
+
+
+def test_agent_device_self_name_update_flow(client: TestClient, auth_headers: dict):
+    pair_code_response = client.post("/api/agent/pair-code", headers=auth_headers)
+    assert pair_code_response.status_code == 200, pair_code_response.text
+    pair_code = pair_code_response.json()["pair_code"]
+
+    device_id = f"gt-test-device-{uuid4().hex[:12]}"
+    pair_response = client.post(
+        "/api/agent/pair",
+        json={
+            "pair_code": pair_code,
+            "device_id": device_id,
+            "device_name": "Initial Name",
+        },
+    )
+    assert pair_response.status_code == 200, pair_response.text
+    access_token = pair_response.json()["access_token"]
+
+    update_response = client.put(
+        "/api/agent/device/self",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={"device_name": "Renamed Device"},
+    )
+    assert update_response.status_code == 200, update_response.text
+    updated_payload = update_response.json()
+    assert updated_payload["ok"] is True
+    assert updated_payload["device_id"] == device_id
+    assert updated_payload["device_name"] == "Renamed Device"
+
+    list_devices = client.get("/api/agent/devices", headers=auth_headers)
+    assert list_devices.status_code == 200, list_devices.text
+    rows = [item for item in list_devices.json() if item["device_id"] == device_id]
+    assert rows, "paired device is missing in /api/agent/devices"
+    assert rows[0]["device_name"] == "Renamed Device"
+
+
+def test_agent_device_self_name_update_requires_agent_token(client: TestClient, auth_headers: dict):
+    pair_code_response = client.post("/api/agent/pair-code", headers=auth_headers)
+    assert pair_code_response.status_code == 200, pair_code_response.text
+    pair_code = pair_code_response.json()["pair_code"]
+
+    device_id = f"gt-test-device-{uuid4().hex[:12]}"
+    pair_response = client.post(
+        "/api/agent/pair",
+        json={
+            "pair_code": pair_code,
+            "device_id": device_id,
+            "device_name": "Initial Name",
+        },
+    )
+    assert pair_response.status_code == 200, pair_response.text
+
+    no_auth = client.put("/api/agent/device/self", json={"device_name": "X"})
+    assert no_auth.status_code == 401, no_auth.text
+
+    user_jwt_auth = client.put(
+        "/api/agent/device/self",
+        headers=auth_headers,
+        json={"device_name": "X"},
+    )
+    assert user_jwt_auth.status_code == 401, user_jwt_auth.text

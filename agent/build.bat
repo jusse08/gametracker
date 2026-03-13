@@ -92,6 +92,18 @@ if errorlevel 1 (
   )
 )
 
+REM Warn if venv is based on Microsoft Store Python (causes noisy PyInstaller dependency warnings).
+for /f "delims=" %%E in ('call .venv\Scripts\python.exe -c "import sys; print(sys.executable)"') do set "VENV_PY_EXE=%%E"
+echo "%VENV_PY_EXE%" | find /i "WindowsApps" >nul
+if not errorlevel 1 (
+  echo.
+  echo [WARN] Detected Microsoft Store Python runtime:
+  echo        %VENV_PY_EXE%
+  echo        This runtime often causes many "api-ms-win-*" warnings in PyInstaller logs.
+  echo        Recommended: install Python from python.org and rebuild.
+  echo.
+)
+
 REM Build with PyInstaller from venv
 echo Building executable...
 call .venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --onefile --noconsole --name GameTrackerAgent agent.py

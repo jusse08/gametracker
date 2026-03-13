@@ -32,6 +32,7 @@ from app.domain.models import (
 )
 from app.domain.schemas import (
     AgentConfigRequest,
+    AgentDeviceUpdateRequest,
     AgentLaunchAckRequest,
     AgentLaunchRequest,
     AgentNoteUpdateRequest,
@@ -417,6 +418,50 @@ def refresh_agent_access_token(
         "device_id": device.device_id,
         "device_name": device.device_name,
     }
+
+
+@router.put("/api/agent/device/self")
+def update_current_agent_device(
+    *,
+    session: Session = Depends(get_session),
+    req: AgentDeviceUpdateRequest,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+):
+    token = _extract_bearer_token(authorization or "")
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing access token")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid access token")
+
+    if payload.get("agent") is not True:
+        raise HTTPException(status_code=401, detail="Token is not agent token")
+
+    user_id_str = payload.get("sub")
+    device_id = (payload.get("device_id") or "").strip()
+    if not user_id_str or not device_id:
+        raise HTTPException(status_code=401, detail="Invalid access token payload")
+    try:
+        user_id = int(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid access token payload")
+
+    device = session.exec(
+        select(AgentDevice).where(
+            AgentDevice.user_id == user_id,
+            AgentDevice.device_id == device_id,
+        )
+    ).first()
+    if not device or device.revoked_at or device.refresh_expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Agent device is revoked or expired")
+
+    device.device_name = _validate_device_name(req.device_name)
+    device.last_seen_at = datetime.utcnow()
+    session.add(device)
+    session.commit()
+
+    return {"ok": True, "device_id": device.device_id, "device_name": device.device_name}
 
 
 @router.get("/api/agent/devices", response_model=List[AgentDeviceRead])

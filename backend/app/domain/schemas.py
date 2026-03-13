@@ -43,6 +43,10 @@ class AgentRefreshRequest(BaseModel):
     refresh_token: str
 
 
+class AgentDeviceUpdateRequest(BaseModel):
+    device_name: str
+
+
 class GameFactResponse(BaseModel):
     text: str
     game_title: str
