@@ -106,6 +106,15 @@ export interface GameFact {
     source: string;
 }
 
+export interface GameProgressSummaryItem {
+    game_id: number;
+    progress_percent: number;
+    checklist_total: number;
+    checklist_completed: number;
+    achievement_total: number;
+    achievement_completed: number;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 const AUTH_STATE_KEY = 'auth_session';
 
@@ -239,6 +248,12 @@ export const api = {
         return handleResponse<Game[]>(res);
     },
 
+    async getGameProgressSummary(): Promise<GameProgressSummaryItem[]> {
+        const res = await apiFetch(`${API_BASE}/games/progress-summary`, { headers: getAuthHeaders() });
+        const payload = await handleResponse<{ items: GameProgressSummaryItem[] }>(res);
+        return payload.items;
+    },
+
     async getRandomGameFact(): Promise<GameFact> {
         const res = await apiFetch(`${API_BASE}/facts/random`, { headers: getAuthHeaders() });
         return handleResponse<GameFact>(res);
@@ -319,9 +334,10 @@ export const api = {
     },
 
     async completeChecklistItem(itemId: number, completed: boolean): Promise<ChecklistItem> {
-        const res = await apiFetch(`${API_BASE}/checklist/${itemId}?completed=${completed}`, {
+        const res = await apiFetch(`${API_BASE}/checklist/${itemId}`, {
             method: 'PUT',
-            headers: getAuthHeaders()
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ completed })
         });
         return handleResponse<ChecklistItem>(res);
     },
@@ -358,9 +374,10 @@ export const api = {
     },
 
     async updateNote(noteId: number, text: string): Promise<Note> {
-        const res = await apiFetch(`${API_BASE}/notes/${noteId}?text=${encodeURIComponent(text)}`, {
+        const res = await apiFetch(`${API_BASE}/notes/${noteId}`, {
             method: 'PUT',
-            headers: getAuthHeaders()
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
         });
         return handleResponse<Note>(res);
     },

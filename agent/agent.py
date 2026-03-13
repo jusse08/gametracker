@@ -73,10 +73,7 @@ def debug_log(scope: str, message: str) -> None:
     store = DEBUG_LOG_STORE
     if store is None:
         return
-    try:
-        store.add(scope, message)
-    except Exception:
-        pass
+    store.add(scope, message)
 
 
 
@@ -198,7 +195,7 @@ def launch_game(launch_path: str) -> Tuple[bool, Optional[str]]:
             subprocess.Popen([normalized_launch_path])
         debug_log("LAUNCH", f"Launch started: {normalized_launch_path}")
         return True, None
-    except Exception as e:
+    except OSError as e:
         debug_log("LAUNCH", f"Launch failed: {normalized_launch_path} ({e})")
         return False, str(e)
 
@@ -298,7 +295,7 @@ def set_autostart_windows(enabled: bool) -> Tuple[bool, str]:
             return True, ""
         finally:
             winreg.CloseKey(key)
-    except Exception as e:
+    except (ImportError, OSError) as e:
         return False, str(e)
 
 
@@ -315,7 +312,7 @@ def is_autostart_enabled_windows() -> bool:
             return bool(value)
         finally:
             winreg.CloseKey(key)
-    except Exception:
+    except (ImportError, OSError):
         return False
 
 
@@ -328,7 +325,7 @@ def ws_worker(
 ) -> None:
     try:
         import websocket
-    except Exception:
+    except ImportError:
         debug_log("WS", "websocket-client is not available; WS worker disabled")
         return
     workers.ws_worker(

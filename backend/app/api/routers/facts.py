@@ -20,8 +20,6 @@ def read_random_fact(_: User = Depends(get_current_user)):
         return fetch_random_fandom_fact()
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Failed to read facts file") from exc
 
 
 @router.post("/api/facts/rebuild")

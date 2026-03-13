@@ -1,5 +1,18 @@
-from fastapi.testclient import TestClient
 from uuid import uuid4
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.api.routers import agent as agent_router
+
+
+@pytest.fixture(autouse=True)
+def reset_pair_rate_limit_state():
+    with agent_router.PAIR_ATTEMPTS_LOCK:
+        agent_router.PAIR_ATTEMPTS.clear()
+    yield
+    with agent_router.PAIR_ATTEMPTS_LOCK:
+        agent_router.PAIR_ATTEMPTS.clear()
 
 
 def _create_non_steam_game(client: TestClient, auth_headers: dict) -> int:
@@ -186,3 +199,26 @@ def test_agent_device_self_name_update_requires_agent_token(client: TestClient, 
         json={"device_name": "X"},
     )
     assert user_jwt_auth.status_code == 401, user_jwt_auth.text
+
+
+def test_agent_pair_rate_limit_blocks_bruteforce(client: TestClient):
+    for _ in range(agent_router.AGENT_PAIR_MAX_ATTEMPTS - 1):
+        response = client.post(
+            "/api/agent/pair",
+            json={
+                "pair_code": "000000",
+                "device_id": f"gt-test-device-{uuid4().hex[:12]}",
+                "device_name": "Rate Limit Probe",
+            },
+        )
+        assert response.status_code == 401, response.text
+
+    blocked = client.post(
+        "/api/agent/pair",
+        json={
+            "pair_code": "000000",
+            "device_id": f"gt-test-device-{uuid4().hex[:12]}",
+            "device_name": "Rate Limit Probe",
+        },
+    )
+    assert blocked.status_code == 429, blocked.text

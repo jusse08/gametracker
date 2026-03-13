@@ -2,19 +2,23 @@ from datetime import datetime
 from typing import Dict, Optional, Sequence
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlmodel import Session, select
 
 from app.domain.models import (
+    Achievement,
     AgentConfig,
     ChecklistItem,
     Game,
     GameRead,
     Note,
-    Session as DbSession,
     User,
     UserRead,
 )
+from app.domain.models import (
+    Session as DbSession,
+)
+from app.domain.schemas import GameProgressSummaryItem
 
 
 def is_superadmin(user: User) -> bool:
@@ -94,6 +98,97 @@ def get_total_playtime_map(session: Session, game_ids: Sequence[int]) -> Dict[in
         .group_by(DbSession.game_id)
     ).all()
     return {int(game_id): int(total or 0) for game_id, total in rows}
+
+
+def _calc_progress_percent(
+    *,
+    sync_type: str,
+    checklist_total: int,
+    checklist_completed: int,
+    achievement_total: int,
+    achievement_completed: int,
+) -> int:
+    checklist_percent = (
+        round((checklist_completed / checklist_total) * 100) if checklist_total > 0 else None
+    )
+    achievement_percent = (
+        round((achievement_completed / achievement_total) * 100) if achievement_total > 0 else None
+    )
+
+    if sync_type == "steam":
+        if checklist_percent is None and achievement_percent is None:
+            return 0
+        if checklist_percent is None:
+            return achievement_percent or 0
+        if achievement_percent is None:
+            return checklist_percent
+        return round((checklist_percent + achievement_percent) / 2)
+
+    return checklist_percent or 0
+
+
+def get_game_progress_summary_map(
+    session: Session,
+    games: Sequence[Game],
+) -> Dict[int, GameProgressSummaryItem]:
+    game_map = {game.id: game for game in games if game.id is not None}
+    game_ids = list(game_map.keys())
+    if not game_ids:
+        return {}
+
+    checklist_rows = session.exec(
+        select(
+            ChecklistItem.game_id,
+            func.count(ChecklistItem.id),
+            func.coalesce(
+                func.sum(case((ChecklistItem.completed, 1), else_=0)),
+                0,
+            ),
+        )
+        .where(ChecklistItem.game_id.in_(game_ids))
+        .group_by(ChecklistItem.game_id)
+    ).all()
+    checklist_map = {
+        int(game_id): (int(total or 0), int(completed or 0))
+        for game_id, total, completed in checklist_rows
+    }
+
+    achievement_rows = session.exec(
+        select(
+            Achievement.game_id,
+            func.count(Achievement.id),
+            func.coalesce(
+                func.sum(case((Achievement.completed, 1), else_=0)),
+                0,
+            ),
+        )
+        .where(Achievement.game_id.in_(game_ids))
+        .group_by(Achievement.game_id)
+    ).all()
+    achievement_map = {
+        int(game_id): (int(total or 0), int(completed or 0))
+        for game_id, total, completed in achievement_rows
+    }
+
+    result: Dict[int, GameProgressSummaryItem] = {}
+    for game_id, game in game_map.items():
+        checklist_total, checklist_completed = checklist_map.get(game_id, (0, 0))
+        achievement_total, achievement_completed = achievement_map.get(game_id, (0, 0))
+        result[game_id] = GameProgressSummaryItem(
+            game_id=game_id,
+            progress_percent=_calc_progress_percent(
+                sync_type=game.sync_type,
+                checklist_total=checklist_total,
+                checklist_completed=checklist_completed,
+                achievement_total=achievement_total,
+                achievement_completed=achievement_completed,
+            ),
+            checklist_total=checklist_total,
+            checklist_completed=checklist_completed,
+            achievement_total=achievement_total,
+            achievement_completed=achievement_completed,
+        )
+    return result
 
 
 def build_game_read(session: Session, game: Game, playtime_map: Optional[Dict[int, int]] = None) -> GameRead:

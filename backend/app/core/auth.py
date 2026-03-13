@@ -1,10 +1,11 @@
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-import jwt
-from sqlmodel import Session
-from fastapi import Depends, HTTPException, Request, status
+
 import bcrypt
+import jwt
+from fastapi import Depends, HTTPException, Request, status
+from sqlmodel import Session
 
 from app.core.database import get_session
 from app.domain.models import User
@@ -79,8 +80,8 @@ def get_current_user(
         user_id = int(user_id_str) if user_id_str else None
         if user_id is None:
             raise credentials_exception
-    except jwt.PyJWTError:
-        raise credentials_exception
+    except jwt.PyJWTError as exc:
+        raise credentials_exception from exc
 
     user = session.get(User, user_id)
     if user is None:

@@ -1,21 +1,35 @@
-import os
-import ntpath
-import secrets
-import re
-import threading
 import asyncio
 import hashlib
+import logging
+import ntpath
+import os
+import re
+import secrets
+import threading
+from collections import deque
 from datetime import datetime, timedelta
-from uuid import uuid4
 from typing import Any, Dict, List, Optional, Set
+from uuid import uuid4
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, WebSocketException, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    WebSocketException,
+    status,
+)
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
 from app.core.auth import ALGORITHM, SECRET_KEY, create_access_token, get_current_user
-from app.core.database import get_session, engine
+from app.core.database import engine, get_session
+from app.core.time import utc_now
 from app.domain.models import (
     AgentConfig,
     AgentConfigRead,
@@ -27,8 +41,10 @@ from app.domain.models import (
     Note,
     NoteCreate,
     NoteRead,
-    Session as DbSession,
     User,
+)
+from app.domain.models import (
+    Session as DbSession,
 )
 from app.domain.schemas import (
     AgentConfigRequest,
@@ -45,19 +61,24 @@ from app.services.common import (
     build_game_read,
     ensure_owned_game_with_detail,
     ensure_owned_note_with_detail,
-    get_total_playtime_map,
     get_agent_config_by_game_id,
+    get_total_playtime_map,
     upsert_agent_session,
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 AGENT_HEARTBEAT_TIMEOUT_SECONDS = 30
 AGENT_LIVE_HEARTBEAT_TIMEOUT_SECONDS = 20
 AGENT_PAIR_CODE_TTL_SECONDS = 600
 AGENT_ACCESS_TOKEN_TTL_MINUTES = 15
 AGENT_REFRESH_TOKEN_TTL_DAYS = 30
 AGENT_SESSION_GAP_SECONDS = 30
+AGENT_PAIR_WINDOW_SECONDS = 300
+AGENT_PAIR_MAX_ATTEMPTS = 10
 WINDOWS_ABS_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
+PAIR_ATTEMPTS: Dict[str, deque[float]] = {}
+PAIR_ATTEMPTS_LOCK = threading.Lock()
 
 
 class AgentWsManager:
@@ -97,7 +118,8 @@ class AgentWsManager:
         for ws in targets:
             try:
                 await ws.send_json(payload)
-            except Exception:
+            except (RuntimeError, WebSocketDisconnect):
+                logger.info("Dropping stale agent websocket for user_id=%s", user_id, exc_info=True)
                 self.disconnect(user_id, ws)
 
     def notify_snapshot(self, user_id: int, items: List[Dict[str, Any]]) -> None:
@@ -121,6 +143,45 @@ WS_MANAGER = AgentWsManager()
 def _hash_value(raw: str) -> str:
     payload = f"{SECRET_KEY}:{raw}".encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def _client_ip(request: Optional[Request]) -> str:
+    forwarded = (request.headers.get("x-forwarded-for") or "").strip() if request else ""
+    if forwarded:
+        return forwarded.split(",")[0].strip() or "unknown"
+    return request.client.host if request and request.client else "unknown"
+
+
+def _cleanup_pair_attempts(attempts: deque[float], now_ts: float) -> None:
+    while attempts and now_ts - attempts[0] > AGENT_PAIR_WINDOW_SECONDS:
+        attempts.popleft()
+
+
+def _count_pair_failures(client_ip: str) -> int:
+    now_ts = datetime.now().timestamp()
+    with PAIR_ATTEMPTS_LOCK:
+        attempts = PAIR_ATTEMPTS.get(client_ip)
+        if not attempts:
+            return 0
+        _cleanup_pair_attempts(attempts, now_ts)
+        if not attempts:
+            PAIR_ATTEMPTS.pop(client_ip, None)
+            return 0
+        return len(attempts)
+
+
+def _register_pair_failure(client_ip: str) -> int:
+    now_ts = datetime.now().timestamp()
+    with PAIR_ATTEMPTS_LOCK:
+        attempts = PAIR_ATTEMPTS.setdefault(client_ip, deque())
+        _cleanup_pair_attempts(attempts, now_ts)
+        attempts.append(now_ts)
+        return len(attempts)
+
+
+def _clear_pair_failures(client_ip: str) -> None:
+    with PAIR_ATTEMPTS_LOCK:
+        PAIR_ATTEMPTS.pop(client_ip, None)
 
 
 def _extract_bearer_token(authorization: str) -> str:
@@ -154,7 +215,7 @@ def _issue_agent_tokens(user_id: int, device_id: str) -> Dict[str, Any]:
     )
     refresh_token = secrets.token_urlsafe(48)
     refresh_hash = _hash_value(refresh_token)
-    refresh_expires_at = datetime.utcnow() + timedelta(days=AGENT_REFRESH_TOKEN_TTL_DAYS)
+    refresh_expires_at = utc_now() + timedelta(days=AGENT_REFRESH_TOKEN_TTL_DAYS)
     return {
         "access_token": access_token,
         "access_expires_in": int(access_ttl.total_seconds()),
@@ -170,8 +231,8 @@ def _get_agent_user_by_access_token(session: Session, token: str) -> User:
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid access token")
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid access token") from exc
 
     if payload.get("agent") is not True:
         raise HTTPException(status_code=401, detail="Token is not agent token")
@@ -183,8 +244,8 @@ def _get_agent_user_by_access_token(session: Session, token: str) -> User:
 
     try:
         user_id = int(user_id_str)
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid access token payload")
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="Invalid access token payload") from exc
 
     device = session.exec(
         select(AgentDevice).where(
@@ -192,14 +253,14 @@ def _get_agent_user_by_access_token(session: Session, token: str) -> User:
             AgentDevice.user_id == user_id,
         )
     ).first()
-    if not device or device.revoked_at or device.refresh_expires_at < datetime.utcnow():
+    if not device or device.revoked_at or device.refresh_expires_at < utc_now():
         raise HTTPException(status_code=401, detail="Agent device is revoked or expired")
 
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    now = datetime.utcnow()
+    now = utc_now()
     device.last_seen_at = now
     session.add(device)
     session.commit()
@@ -208,7 +269,7 @@ def _get_agent_user_by_access_token(session: Session, token: str) -> User:
 
 
 def _touch_agent_heartbeat(session: Session, agent_user: User) -> None:
-    now = datetime.utcnow()
+    now = utc_now()
     if (
         not agent_user.agent_last_seen_at
         or (now - agent_user.agent_last_seen_at).total_seconds() >= 1
@@ -292,11 +353,11 @@ def create_agent_pair_code(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    now = datetime.utcnow()
+    now = utc_now()
     active_codes = session.exec(
         select(AgentPairCode).where(
             AgentPairCode.user_id == current_user.id,
-            AgentPairCode.consumed_at == None,
+            AgentPairCode.consumed_at.is_(None),
             AgentPairCode.expires_at > now,
         )
     ).all()
@@ -322,20 +383,28 @@ def create_agent_pair_code(
 
 @router.post("/api/agent/pair")
 def pair_agent_device(
+    request: Request,
     *,
     session: Session = Depends(get_session),
     req: AgentPairRequest,
 ):
-    now = datetime.utcnow()
+    client_ip = _client_ip(request)
+    if _count_pair_failures(client_ip) >= AGENT_PAIR_MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many pairing attempts. Try again later.")
+
+    now = utc_now()
     pair_hash = _hash_value((req.pair_code or "").strip())
     pair_row = session.exec(
         select(AgentPairCode).where(
             AgentPairCode.code_hash == pair_hash,
-            AgentPairCode.consumed_at == None,
+            AgentPairCode.consumed_at.is_(None),
             AgentPairCode.expires_at > now,
         )
     ).first()
     if not pair_row:
+        failures = _register_pair_failure(client_ip)
+        if failures >= AGENT_PAIR_MAX_ATTEMPTS:
+            raise HTTPException(status_code=429, detail="Too many pairing attempts. Try again later.")
         raise HTTPException(status_code=401, detail="Invalid or expired pair code")
 
     device_id = _validate_device_id(req.device_id)
@@ -366,6 +435,7 @@ def pair_agent_device(
     session.add(device)
     session.add(pair_row)
     session.commit()
+    _clear_pair_failures(client_ip)
 
     return {
         "ok": True,
@@ -385,7 +455,7 @@ def refresh_agent_access_token(
     session: Session = Depends(get_session),
     req: AgentRefreshRequest,
 ):
-    now = datetime.utcnow()
+    now = utc_now()
     device_id = _validate_device_id(req.device_id)
     refresh_hash = _hash_value((req.refresh_token or "").strip())
     device = session.exec(
@@ -432,8 +502,8 @@ def update_current_agent_device(
         raise HTTPException(status_code=401, detail="Missing access token")
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid access token")
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid access token") from exc
 
     if payload.get("agent") is not True:
         raise HTTPException(status_code=401, detail="Token is not agent token")
@@ -444,8 +514,8 @@ def update_current_agent_device(
         raise HTTPException(status_code=401, detail="Invalid access token payload")
     try:
         user_id = int(user_id_str)
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid access token payload")
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="Invalid access token payload") from exc
 
     device = session.exec(
         select(AgentDevice).where(
@@ -453,11 +523,11 @@ def update_current_agent_device(
             AgentDevice.device_id == device_id,
         )
     ).first()
-    if not device or device.revoked_at or device.refresh_expires_at < datetime.utcnow():
+    if not device or device.revoked_at or device.refresh_expires_at < utc_now():
         raise HTTPException(status_code=401, detail="Agent device is revoked or expired")
 
     device.device_name = _validate_device_name(req.device_name)
-    device.last_seen_at = datetime.utcnow()
+    device.last_seen_at = utc_now()
     session.add(device)
     session.commit()
 
@@ -495,7 +565,7 @@ def revoke_agent_device(
     if not row:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    row.revoked_at = datetime.utcnow()
+    row.revoked_at = utc_now()
     session.add(row)
     session.commit()
     WS_MANAGER.disconnect_all(current_user.id)
@@ -521,7 +591,10 @@ async def agent_ws(
         try:
             user = _get_agent_user_by_token(session, token)
         except HTTPException as exc:
-            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason=exc.detail)
+            raise WebSocketException(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason=exc.detail,
+            ) from exc
 
         WS_MANAGER.bind_loop(asyncio.get_running_loop())
         await WS_MANAGER.connect(user.id, websocket)
@@ -546,9 +619,9 @@ def get_agent_commands(
         select(AgentConfig)
         .join(Game, AgentConfig.game_id == Game.id)
         .where(
-            AgentConfig.enabled == True,
-            AgentConfig.pending_launch_id != None,
-            AgentConfig.pending_launch_path != None,
+            AgentConfig.enabled,
+            AgentConfig.pending_launch_id.is_not(None),
+            AgentConfig.pending_launch_path.is_not(None),
             Game.user_id == agent_user.id,
         )
     )
@@ -585,11 +658,11 @@ def ack_agent_command(
 
     config.last_launch_status = "ok" if req.success else "error"
     config.last_launch_error = None if req.success else (req.error or "Unknown launch error")
-    config.last_launch_at = datetime.utcnow()
+    config.last_launch_at = utc_now()
     config.pending_launch_id = None
     config.pending_launch_path = None
     config.pending_launch_requested_at = None
-    config.updated_at = datetime.utcnow()
+    config.updated_at = utc_now()
     session.add(config)
     session.commit()
     WS_MANAGER.notify_commands_updated(agent_user.id)
@@ -700,7 +773,7 @@ def test_agent_ping(
     config = session.exec(
         select(AgentConfig).where(
             AgentConfig.game_id == game_id,
-            AgentConfig.enabled == True,
+            AgentConfig.enabled,
         )
     ).first()
 
@@ -710,7 +783,7 @@ def test_agent_ping(
             detail="Агент не настроен для этой игры. Сохраните исполняемый файл в карточке игры.",
         )
 
-    now = datetime.utcnow()
+    now = utc_now()
     active_since = now - timedelta(seconds=AGENT_LIVE_HEARTBEAT_TIMEOUT_SECONDS)
     if not current_user.agent_last_seen_at or current_user.agent_last_seen_at < active_since:
         return {
@@ -775,7 +848,7 @@ def ping_session(
     if req.exe_name.strip().lower() != config.exe_name.strip().lower():
         raise HTTPException(status_code=400, detail="Ping exe_name does not match game config")
 
-    now = datetime.utcnow()
+    now = utc_now()
     upsert_agent_session(
         session=session,
         game_id=req.game_id,
@@ -839,7 +912,7 @@ def configure_agent(
         existing.exe_name = exe_name
         existing.launch_path = launch_path
         existing.enabled = enabled
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = utc_now()
         session.add(existing)
         session.commit()
         session.refresh(existing)
@@ -878,8 +951,8 @@ def request_agent_launch(
 
     config.pending_launch_id = str(uuid4())
     config.pending_launch_path = launch_path
-    config.pending_launch_requested_at = datetime.utcnow()
-    config.updated_at = datetime.utcnow()
+    config.pending_launch_requested_at = utc_now()
+    config.updated_at = utc_now()
     session.add(config)
     session.commit()
     WS_MANAGER.notify_commands_updated(current_user.id)

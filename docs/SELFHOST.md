@@ -21,6 +21,20 @@ Start:
 docker compose up -d --build
 ```
 
+`migrate` runs first, then backend starts only if schema is already at Alembic head.
+
+Manual migration command:
+```bash
+docker compose run --rm migrate
+```
+
+Local backend migration command:
+```bash
+cd backend
+python scripts/manage_db.py upgrade
+python scripts/manage_db.py check-current
+```
+
 Stop:
 ```bash
 docker compose down
@@ -75,11 +89,24 @@ cp ./gametracker_data/game_facts.json "./backups/game_facts-$(date +%Y%m%d-%H%M%
 
 1. Pull new version.
 2. Verify `.env` has all required keys from `.env.example`.
-3. Rebuild and restart:
+3. Create backup before touching schema:
 ```bash
-docker compose up -d --build
+mkdir -p backups
+cp ./gametracker_data/database.db "./backups/database-$(date +%Y%m%d-%H%M%S).db"
 ```
-4. Run post-update checks:
+4. Rebuild images:
+```bash
+docker compose build backend frontend
+```
+5. Apply migrations explicitly:
+```bash
+docker compose run --rm migrate
+```
+6. Start updated services:
+```bash
+docker compose up -d backend frontend
+```
+7. Run post-update checks:
 ```bash
 curl -fsS http://localhost:${BACKEND_PORT:-8000}/ready
 docker compose ps
@@ -100,3 +127,9 @@ If backend is unhealthy:
 2. Check DB file permissions in `gametracker_data`.
 3. Validate `.env` values.
 4. Restore last known-good backup.
+
+If update fails after a migration:
+1. Stop services: `docker compose stop backend frontend`
+2. Restore the SQLite backup into `./gametracker_data/database.db`
+3. Start the previous known-good image / checkout
+4. Verify readiness: `curl -fsS http://localhost:${BACKEND_PORT:-8000}/ready`

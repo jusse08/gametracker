@@ -1,9 +1,11 @@
-import requests
-import re
-from typing import List, Dict, Any, Optional
 import logging
+import re
+from typing import Any, Dict, List, Optional
+
+import requests
 
 logger = logging.getLogger(__name__)
+
 
 def build_steam_store_image_urls(app_id: int) -> Dict[str, str]:
     base = f"https://cdn.akamai.steamstatic.com/steam/apps/{app_id}"
@@ -16,46 +18,45 @@ def build_steam_store_image_urls(app_id: int) -> Dict[str, str]:
         "capsule_main": f"{base}/capsule_616x353.jpg",
     }
 
+
 def resolve_steam_id(profile_url: str, api_key: Optional[str] = None) -> Optional[str]:
     """
-    Extracts SteamID64 from profile URL.
+    Extract SteamID64 from profile URL.
     Supports:
     - https://steamcommunity.com/id/vanityname/
     - https://steamcommunity.com/profiles/76561198000000000/
     """
     if not profile_url:
         return None
-        
-    # Check if it's already a SteamID in the URL
-    profile_match = re.search(r'profiles/(\d+)', profile_url)
+
+    profile_match = re.search(r"profiles/(\d+)", profile_url)
     if profile_match:
         return profile_match.group(1)
-        
-    # Check if it's a vanity URL
-    vanity_match = re.search(r'id/([^/]+)', profile_url)
-    if vanity_match:
-        vanity_name = vanity_match.group(1)
-        
-        effective_api_key = api_key
-        if not effective_api_key:
-            return None
-            
-        url = "https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/"
-        params = {
-            "key": effective_api_key,
-            "vanityurl": vanity_name
-        }
-        try:
-            res = requests.get(url, params=params, timeout=10)
-            data = res.json()
-            if data.get("response", {}).get("success") == 1:
-                return data["response"]["steamid"]
-        except Exception:
-            logger.exception("Failed to resolve Steam vanity URL")
-            
+
+    vanity_match = re.search(r"id/([^/]+)", profile_url)
+    if not vanity_match or not api_key:
+        return None
+
+    url = "https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/"
+    params = {"key": api_key, "vanityurl": vanity_match.group(1)}
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except (requests.RequestException, ValueError):
+        logger.exception("Failed to resolve Steam vanity URL")
+        return None
+
+    if data.get("response", {}).get("success") == 1:
+        return data["response"].get("steamid")
     return None
 
-def sync_steam_achievements(app_id: int, steam_api_key: Optional[str], steam_user_id: Optional[str]) -> List[Dict[str, Any]]:
+
+def sync_steam_achievements(
+    app_id: int,
+    steam_api_key: Optional[str],
+    steam_user_id: Optional[str],
+) -> List[Dict[str, Any]]:
     if not steam_api_key or not steam_user_id:
         return []
 
@@ -64,53 +65,65 @@ def sync_steam_achievements(app_id: int, steam_api_key: Optional[str], steam_use
         "key": steam_api_key,
         "steamid": steam_user_id,
         "appid": app_id,
-        "l": "english"
+        "l": "english",
     }
-    
-    try:
-        res = requests.get(url, params=params, timeout=10)
-        if res.status_code == 403:
-             # Likely private profile
-             return [] # We could raise an error or return a specific flag
-             
-        data = res.json()
-        playerstats = data.get("playerstats", {})
-        
-        if not playerstats.get("success", False):
-            # Potential private profile or game doesn't have achievements
-            return []
-            
-        achievements_data = []
-        for ach in playerstats.get("achievements", []):
-            achievements_data.append({
-                "name": ach.get("name", ach["apiname"]),
-                "description": ach.get("description", ""),
-                "completed": ach["achieved"] == 1,
-                "steam_api_name": ach["apiname"],
-                "icon_url": None # We'd need GetSchemaForGame for icons, but let's keep it simple or use a placeholder
-            })
-            
-        # Optional: Get icons from GetSchemaForGame if needed
-        # Fallback to a placeholder icon if icon_url is None
-        schema_url = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/"
-        schema_params = {"key": steam_api_key, "appid": app_id}
-        schema_res = requests.get(schema_url, params=schema_params, timeout=10)
-        schema_data = schema_res.json()
-        game_schema = schema_data.get("game", {}).get("availableGameStats", {}).get("achievements", [])
-        icon_map = {a["name"]: a["icon"] for a in game_schema}
-        
-        for ach in achievements_data:
-            ach["icon_url"] = icon_map.get(ach["steam_api_name"])
-            # Get name and description from schema if missing
-            schema_ach = next((a for a in game_schema if a["name"] == ach["steam_api_name"]), None)
-            if schema_ach:
-                ach["name"] = schema_ach.get("displayName", ach["name"])
-                ach["description"] = schema_ach.get("description", ach["description"])
 
-        return achievements_data
-    except Exception:
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 403:
+            return []
+        response.raise_for_status()
+        data = response.json()
+    except (requests.RequestException, ValueError):
         logger.exception("Steam achievements sync error")
         return []
+
+    playerstats = data.get("playerstats", {})
+    if not playerstats.get("success", False):
+        return []
+
+    achievements_data: List[Dict[str, Any]] = []
+    for achievement in playerstats.get("achievements", []):
+        api_name = achievement.get("apiname")
+        if not api_name:
+            continue
+        achievements_data.append(
+            {
+                "name": achievement.get("name") or api_name,
+                "description": achievement.get("description", ""),
+                "completed": achievement.get("achieved") == 1,
+                "steam_api_name": api_name,
+                "icon_url": None,
+            }
+        )
+
+    schema_url = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/"
+    schema_params = {"key": steam_api_key, "appid": app_id}
+    try:
+        schema_response = requests.get(schema_url, params=schema_params, timeout=10)
+        schema_response.raise_for_status()
+        schema_data = schema_response.json()
+    except (requests.RequestException, ValueError):
+        logger.warning("Steam schema fetch failed for app_id=%s", app_id, exc_info=True)
+        return achievements_data
+
+    game_schema = schema_data.get("game", {}).get("availableGameStats", {}).get("achievements", [])
+    schema_by_name = {
+        item["name"]: item
+        for item in game_schema
+        if isinstance(item, dict) and item.get("name")
+    }
+
+    for achievement in achievements_data:
+        schema_item = schema_by_name.get(achievement["steam_api_name"])
+        if not schema_item:
+            continue
+        achievement["icon_url"] = schema_item.get("icon")
+        achievement["name"] = schema_item.get("displayName", achievement["name"])
+        achievement["description"] = schema_item.get("description", achievement["description"])
+
+    return achievements_data
+
 
 def fetch_steam_playtime(app_id: int, steam_api_key: Optional[str], steam_user_id: Optional[str]) -> int:
     if not steam_api_key or not steam_user_id:
@@ -121,18 +134,20 @@ def fetch_steam_playtime(app_id: int, steam_api_key: Optional[str], steam_user_i
         "key": steam_api_key,
         "steamid": steam_user_id,
         "appids_filter[0]": app_id,
-        "include_appinfo": 1
+        "include_appinfo": 1,
     }
-    
+
     try:
-        res = requests.get(url, params=params, timeout=10)
-        data = res.json()
-        games = data.get("response", {}).get("games", [])
-        if games:
-            return games[0].get("playtime_forever", 0)
-    except Exception:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except (requests.RequestException, ValueError):
         logger.exception("Steam playtime fetch error")
-        
+        return 0
+
+    games = data.get("response", {}).get("games", [])
+    if games:
+        return int(games[0].get("playtime_forever", 0) or 0)
     return 0
 
 
@@ -144,42 +159,46 @@ def fetch_steam_genres(app_id: int) -> List[str]:
         "cc": "US",
     }
     try:
-        res = requests.get(details_url, params=params, timeout=10)
-        res.raise_for_status()
-        payload = res.json()
-        app_payload = payload.get(str(app_id), {})
-        if not app_payload.get("success"):
-            return []
-        data = app_payload.get("data", {})
-        genres = data.get("genres", [])
-        names = [g.get("description", "").strip() for g in genres if isinstance(g, dict)]
-        # Keep order and deduplicate.
-        unique_names = list(dict.fromkeys([name for name in names if name]))
-        return unique_names
-    except Exception:
+        response = requests.get(details_url, params=params, timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError):
         logger.exception("Steam genres fetch error")
         return []
 
+    app_payload = payload.get(str(app_id), {})
+    if not app_payload.get("success"):
+        return []
+    data = app_payload.get("data", {})
+    genres = data.get("genres", [])
+    names = [genre.get("description", "").strip() for genre in genres if isinstance(genre, dict)]
+    return list(dict.fromkeys([name for name in names if name]))
+
+
 def search_steam_games(query: str) -> List[Dict[str, Any]]:
-    # This stays as is, it's a public storefront API
     search_url = f"https://store.steampowered.com/api/storesearch/?term={query}&l=english&cc=US"
     try:
         response = requests.get(search_url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        
-        results = []
-        if data.get("items"):
-            for item in data["items"]:
-                cover_urls = build_steam_store_image_urls(item["id"])
-                results.append({
-                    "title": item["name"],
-                    "steam_app_id": item["id"],
-                    "cover_url": cover_urls["poster2x"],
-                    "cover_urls": cover_urls,
-                    "sync_type": "steam"
-                })
-        return results
-    except Exception:
+    except (requests.RequestException, ValueError):
         logger.exception("Steam search error")
         return []
+
+    results = []
+    for item in data.get("items", []):
+        app_id = item.get("id")
+        name = item.get("name")
+        if not app_id or not name:
+            continue
+        cover_urls = build_steam_store_image_urls(app_id)
+        results.append(
+            {
+                "title": name,
+                "steam_app_id": app_id,
+                "cover_url": cover_urls["poster2x"],
+                "cover_urls": cover_urls,
+                "sync_type": "steam",
+            }
+        )
+    return results

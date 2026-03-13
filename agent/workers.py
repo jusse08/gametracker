@@ -7,6 +7,19 @@ from typing import Callable, Dict, List, Optional, Tuple
 HandledRequests = Dict[str, Tuple[float, bool]]
 
 
+def _websocket_error_types(websocket_module) -> Tuple[type[BaseException], ...]:
+    candidates = [
+        OSError,
+        getattr(websocket_module, "WebSocketException", None),
+        getattr(websocket_module, "WebSocketConnectionClosedException", None),
+    ]
+    return tuple(
+        candidate
+        for candidate in candidates
+        if isinstance(candidate, type) and issubclass(candidate, BaseException)
+    )
+
+
 def run_command_processor(
     server_url: str,
     agent_token: str,
@@ -111,6 +124,7 @@ def ws_worker(
 ) -> None:
     debug_log_fn("WS", "WS worker started")
     reconnect_delay = ws_reconnect_delay_seconds
+    websocket_errors = _websocket_error_types(websocket_module)
     while not stop_event.is_set():
         server_url = settings_store.get_server_url()
         valid_server_url, server_url_error = validate_server_url_fn(server_url)
@@ -161,7 +175,7 @@ def ws_worker(
                 if time.time() >= next_keepalive:
                     try:
                         ws.send("ping")
-                    except Exception:
+                    except websocket_errors:
                         break
                     next_keepalive = time.time() + 15
 
@@ -169,7 +183,7 @@ def ws_worker(
                     raw = ws.recv()
                 except websocket_module.WebSocketTimeoutException:
                     continue
-                except Exception:
+                except websocket_errors:
                     break
 
                 if not raw:
@@ -177,7 +191,7 @@ def ws_worker(
 
                 try:
                     payload = json.loads(raw)
-                except Exception:
+                except json.JSONDecodeError:
                     continue
 
                 msg_type = payload.get("type")
@@ -189,7 +203,7 @@ def ws_worker(
                     command_refresh_event.set()
                     debug_log_fn("WS", "commands_updated received")
 
-        except Exception as e:
+        except websocket_errors as e:
             shared_state.set_last_error(str(e))
             debug_log_fn("WS", f"Disconnected: {e}")
         finally:
@@ -197,7 +211,7 @@ def ws_worker(
             if ws:
                 try:
                     ws.close()
-                except Exception:
+                except websocket_errors:
                     pass
             debug_log_fn("WS", "Connection closed")
 

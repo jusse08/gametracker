@@ -12,10 +12,12 @@ GameTracker for self-hosted personal game tracking.
    - `SECRET_KEY` (long random)
    - `SUPERADMIN_PASSWORD`
    - `ALLOWED_ORIGINS` (your real frontend domain)
+   - replace placeholder values before startup, otherwise backend will refuse to boot
 3. Start stack:
    ```bash
    docker compose up -d --build
    ```
+   `migrate` runs first, then backend starts only if schema is already at Alembic head.
 4. Verify health:
    ```bash
    curl -fsS http://localhost:${BACKEND_PORT:-8000}/health
@@ -36,6 +38,23 @@ See [.env.example](./.env.example).
 ## Operations
 
 See [Self-Host Runbook](./docs/SELFHOST.md).
+
+## Local Backend Startup (Without Docker)
+
+Official DB commands:
+
+```bash
+cd backend
+python scripts/manage_db.py upgrade
+python scripts/manage_db.py check-current
+```
+
+Start the API after migrations:
+
+```bash
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --ws websockets
+```
 
 ## Agent Build (Windows, no Docker)
 

@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import List, Optional
+
 from pydantic import BaseModel
+
 
 class PingRequest(BaseModel):
     game_id: int
@@ -32,6 +34,14 @@ class AgentNoteUpdateRequest(BaseModel):
     text: str
 
 
+class ChecklistItemUpdateRequest(BaseModel):
+    completed: bool
+
+
+class NoteUpdateRequest(BaseModel):
+    text: str
+
+
 class AgentPairRequest(BaseModel):
     pair_code: str
     device_id: str
@@ -51,6 +61,19 @@ class GameFactResponse(BaseModel):
     text: str
     game_title: str
     source: str = "fandom"
+
+
+class GameProgressSummaryItem(BaseModel):
+    game_id: int
+    progress_percent: int
+    checklist_total: int
+    checklist_completed: int
+    achievement_total: int
+    achievement_completed: int
+
+
+class GameProgressSummaryResponse(BaseModel):
+    items: List[GameProgressSummaryItem]
 
 
 class FactsRebuildRequest(BaseModel):

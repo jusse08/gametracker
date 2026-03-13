@@ -1,7 +1,11 @@
-from typing import Optional, List
 from datetime import datetime
-from sqlmodel import Field, SQLModel, Relationship
+from typing import List, Optional
+
 import sqlalchemy as sa
+from sqlmodel import Field, Relationship, SQLModel
+
+from app.core.time import utc_now
+
 
 class UserBase(SQLModel):
     username: str = Field(..., min_length=3, max_length=50, unique=True)
@@ -46,7 +50,7 @@ class GameBase(SQLModel):
         default_factory=list,
         sa_column=sa.Column(sa.JSON(), nullable=False, server_default="[]"),
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 class Game(GameBase, table=True):
     __tablename__ = "games"
@@ -70,7 +74,7 @@ class GameRead(GameBase):
 
 class SessionBase(SQLModel):
     game_id: int = Field(foreign_key="games.id")
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=utc_now)
     ended_at: Optional[datetime] = None
     duration_minutes: Optional[int] = 0
     source: str = Field(default="manual", description="agent | manual")
@@ -128,7 +132,7 @@ class ChecklistItemRead(ChecklistItemBase):
 class QuestCategoryBase(SQLModel):
     game_id: int = Field(foreign_key="games.id")
     name: str = Field(min_length=1, max_length=100)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 class QuestCategory(QuestCategoryBase, table=True):
     __tablename__ = "quest_categories"
@@ -148,7 +152,7 @@ class QuestCategoryRename(SQLModel):
 class NoteBase(SQLModel):
     game_id: int = Field(foreign_key="games.id")
     text: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     session_id: Optional[int] = Field(default=None, foreign_key="sessions.id")
 
 class Note(NoteBase, table=True):
@@ -169,7 +173,7 @@ class AgentConfigBase(SQLModel):
     exe_name: str
     launch_path: Optional[str] = None
     enabled: bool = Field(default=True)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=utc_now)
     pending_launch_id: Optional[str] = None
     pending_launch_path: Optional[str] = None
     pending_launch_requested_at: Optional[datetime] = None
@@ -204,7 +208,7 @@ class AgentPairCode(SQLModel, table=True):
     code_hash: str = Field(index=True, unique=True)
     expires_at: datetime = Field(index=True)
     consumed_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class AgentDeviceBase(SQLModel):
@@ -214,7 +218,7 @@ class AgentDeviceBase(SQLModel):
     refresh_token_hash: str = Field(index=True)
     refresh_expires_at: datetime
     last_seen_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     revoked_at: Optional[datetime] = None
 
 

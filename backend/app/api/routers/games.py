@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,10 +6,10 @@ from sqlmodel import Session, select
 
 from app.core.auth import get_current_user
 from app.core.database import get_session
+from app.core.time import utc_now
 from app.domain.models import (
     Achievement,
     AchievementRead,
-    AgentConfig,
     ChecklistItem,
     ChecklistItemCreate,
     ChecklistItemRead,
@@ -25,11 +24,18 @@ from app.domain.models import (
     QuestCategoryCreate,
     QuestCategoryRead,
     QuestCategoryRename,
-    Session as DbSession,
     SessionRead,
     User,
 )
-from app.domain.schemas import WikiImportRequest
+from app.domain.models import (
+    Session as DbSession,
+)
+from app.domain.schemas import (
+    ChecklistItemUpdateRequest,
+    GameProgressSummaryResponse,
+    NoteUpdateRequest,
+    WikiImportRequest,
+)
 from app.integrations.scraper import parse_wiki_missions
 from app.integrations.steam import (
     build_steam_store_image_urls,
@@ -43,8 +49,9 @@ from app.services.common import (
     ensure_owned_checklist_item_with_detail,
     ensure_owned_game,
     ensure_owned_note_with_detail,
-    get_total_playtime_map,
     get_agent_config_by_game_id,
+    get_game_progress_summary_map,
+    get_total_playtime_map,
     validate_game_status,
     validate_sync_type,
 )
@@ -123,6 +130,19 @@ def read_games(
     games = session.exec(query).all()
     playtime_map = get_total_playtime_map(session, [game.id for game in games if game.id is not None])
     return [build_game_read(session, game, playtime_map=playtime_map) for game in games]
+
+
+@router.get("/api/games/progress-summary", response_model=GameProgressSummaryResponse)
+def read_game_progress_summary(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    games = session.exec(select(Game).where(Game.user_id == current_user.id)).all()
+    summary_map = get_game_progress_summary_map(session, games)
+    return GameProgressSummaryResponse(
+        items=[summary_map[game.id] for game in games if game.id is not None]
+    )
 
 
 @router.get("/api/games/{game_id}", response_model=GameRead)
@@ -229,23 +249,6 @@ def read_checklist_categories(
     categories = session.exec(
         select(QuestCategory).where(QuestCategory.game_id == game_id).order_by(QuestCategory.name.asc())
     ).all()
-
-    # Backfill categories from checklist items for pre-existing DB rows.
-    existing_lc = {c.name.lower() for c in categories}
-    item_categories = session.exec(
-        select(ChecklistItem.category).where(ChecklistItem.game_id == game_id)
-    ).all()
-    for category_name in item_categories:
-        normalized = normalize_category_name(category_name)
-        if normalized.lower() not in existing_lc:
-            new_category = QuestCategory(game_id=game_id, name=normalized)
-            session.add(new_category)
-            categories.append(new_category)
-            existing_lc.add(normalized.lower())
-
-    session.commit()
-    for category in categories:
-        session.refresh(category)
     return sorted(categories, key=lambda c: c.name.lower())
 
 
@@ -332,10 +335,10 @@ def update_checklist_item(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
     item_id: int,
-    completed: bool,
+    payload: ChecklistItemUpdateRequest,
 ):
     db_item = ensure_owned_checklist_item_with_detail(session, current_user, item_id, "Item not found")
-    db_item.completed = completed
+    db_item.completed = payload.completed
     session.add(db_item)
     session.commit()
     session.refresh(db_item)
@@ -368,7 +371,7 @@ def delete_checklist_category(
 
     query = select(ChecklistItem).where(
         ChecklistItem.game_id == game_id,
-        ChecklistItem.category == normalized,
+        func.lower(ChecklistItem.category) == normalized.lower(),
     )
     items = session.exec(query).all()
 
@@ -461,10 +464,10 @@ def update_note(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
     note_id: int,
-    text: str,
+    payload: NoteUpdateRequest,
 ):
     db_note = ensure_owned_note_with_detail(session, current_user, note_id, "Note not found")
-    db_note.text = text
+    db_note.text = payload.text
     session.add(db_note)
     session.commit()
     session.refresh(db_note)
@@ -513,8 +516,8 @@ def _sync_steam_playtime_manual(
     diff = steam_playtime - current_total
     sync_session = DbSession(
         game_id=game_id,
-        started_at=datetime.utcnow(),
-        ended_at=datetime.utcnow(),
+        started_at=utc_now(),
+        ended_at=utc_now(),
         duration_minutes=diff,
         source="steam_manual_sync",
     )
@@ -541,7 +544,7 @@ def _sync_steam_achievements_for_game(
             db_ach = existing_map[api_name]
             db_ach.completed = item["completed"]
             if db_ach.completed and not db_ach.completed_at:
-                db_ach.completed_at = datetime.utcnow()
+                db_ach.completed_at = utc_now()
             session.add(db_ach)
             db_items.append(db_ach)
         else:
@@ -551,7 +554,7 @@ def _sync_steam_achievements_for_game(
                 description=item["description"],
                 icon_url=item["icon_url"],
                 completed=item["completed"],
-                completed_at=datetime.utcnow() if item["completed"] else None,
+                completed_at=utc_now() if item["completed"] else None,
                 steam_api_name=api_name,
             )
             session.add(db_ach)

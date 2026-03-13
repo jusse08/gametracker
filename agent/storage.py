@@ -1,5 +1,6 @@
 import ctypes
 import json
+import logging
 import os
 import threading
 from ctypes import wintypes
@@ -8,6 +9,7 @@ from ctypes import wintypes
 APP_NAME = "GameTracker"
 AGENT_SETTINGS_FILENAME = "agent_settings.json"
 AGENT_TOKEN_FILENAME = "agent_auth.bin"
+logger = logging.getLogger(__name__)
 
 
 class DATA_BLOB(ctypes.Structure):
@@ -108,9 +110,10 @@ class SettingsStore:
                             device_name = str(payload.get("device_name") or "").strip()
                         else:
                             token = decoded
-                    except Exception:
+                    except json.JSONDecodeError:
                         token = decoded
-            except Exception:
+            except (OSError, UnicodeDecodeError) as exc:
+                logger.warning("Failed to load agent token state from %s: %s", token_path, exc)
                 token = ""
         autostart = False
         server_url = ""
@@ -121,7 +124,8 @@ class SettingsStore:
                     payload = json.load(f)
                     autostart = bool(payload.get("autostart", False))
                     server_url = (payload.get("server_url") or "").strip().rstrip("/")
-            except Exception:
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Failed to load agent settings from %s: %s", settings_path, exc)
                 autostart = False
                 server_url = ""
         with self._lock:
@@ -156,13 +160,13 @@ class SettingsStore:
             )
             with open(get_token_path(), "wb") as f:
                 f.write(encrypt_for_current_user(token_payload.encode("utf-8")))
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.warning("Failed to save agent token state: %s", exc)
         try:
             with open(get_settings_path(), "w", encoding="utf-8") as f:
                 json.dump({"autostart": autostart, "server_url": server_url}, f, ensure_ascii=True, indent=2)
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.warning("Failed to save agent settings: %s", exc)
 
     def set_token(self, token: str) -> None:
         with self._lock:

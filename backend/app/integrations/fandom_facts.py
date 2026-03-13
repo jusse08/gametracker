@@ -1,4 +1,5 @@
 import json
+import logging
 import random
 import re
 import time
@@ -12,6 +13,7 @@ from bs4 import BeautifulSoup
 REQUEST_DELAY = 0.35
 MIN_ARTICLE_WORDS = 25
 MAX_FACT_LENGTH = 180
+logger = logging.getLogger(__name__)
 
 DEFAULT_SEED_URLS = [
     "https://eldenring.fandom.com/wiki/Category:Characters",
@@ -347,7 +349,6 @@ def collect_facts_from_fandom_page(page_url: str, game: Optional[str] = None, ma
     ):
         junk.decompose()
     root = soup.select_one(".mw-parser-output") or soup
-    current_section = ""
     facts: List[Dict[str, str]] = []
     seen = set()
     game_name = (game or infer_game_name_from_url(page_url)).strip() or "Unknown Game"
@@ -362,10 +363,8 @@ def collect_facts_from_fandom_page(page_url: str, game: Optional[str] = None, ma
         if node.name in {"h2", "h3"}:
             heading = _normalize_text(node.get_text(" ", strip=True)).replace("[править]", "").strip(" :")
             heading_lc = heading.lower()
-            if heading and heading_lc not in skip_sections:
-                current_section = heading
-            else:
-                current_section = ""
+            if not heading or heading_lc in skip_sections:
+                continue
             continue
 
         raw_text = _normalize_text(node.get_text(" ", strip=True))
@@ -412,7 +411,8 @@ def collect_fandom_facts(
             continue
         try:
             domain, lang_prefix, titles = _titles_from_seed(seed, per_seed_limit)
-        except Exception:
+        except (requests.RequestException, ValueError):
+            logger.warning("Skipping Fandom seed after upstream failure: %s", seed, exc_info=True)
             continue
         if not domain or not titles:
             continue
@@ -426,7 +426,13 @@ def collect_fandom_facts(
 
             try:
                 extract = _fetch_extract(domain, title, lang_prefix=lang_prefix)
-            except Exception:
+            except (requests.RequestException, ValueError):
+                logger.warning(
+                    "Skipping Fandom page after extract failure: %s/%s",
+                    domain,
+                    title,
+                    exc_info=True,
+                )
                 continue
             if not extract:
                 continue
@@ -435,7 +441,9 @@ def collect_fandom_facts(
             if not fact:
                 continue
 
-            key = fact["fact"].lower()
+            key = str(fact.get("FACT") or fact.get("fact") or "").lower()
+            if not key:
+                continue
             if key in seen_facts:
                 continue
             seen_facts.add(key)
@@ -469,7 +477,8 @@ def load_facts_json(path: Optional[Path] = None) -> List[Dict[str, str]]:
                 if isinstance(fact, str) and fact.strip():
                     result.append({"GAME": str(game or "Unknown Game"), "FACT": fact.strip()})
             return result
-    except Exception:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        logger.warning("Failed to load facts json from %s", source, exc_info=True)
         return []
     return []
 

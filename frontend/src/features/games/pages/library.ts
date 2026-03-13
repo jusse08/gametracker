@@ -1,4 +1,4 @@
-import { api, type Game } from '../../../shared/api';
+import { api, type Game, type GameProgressSummaryItem } from '../../../shared/api';
 import { showNotification } from '../../../shared/ui';
 import { pickSteamPoster } from '../../../shared/lib/steam-images';
 
@@ -179,6 +179,24 @@ export async function renderLibrary(container: HTMLElement) {
         });
     };
 
+    function hydrateProfileProgress(items: GameProgressSummaryItem[]) {
+        profileProgressByGameId.clear();
+        items.forEach((item) => {
+            profileProgressByGameId.set(item.game_id, item.progress_percent);
+        });
+    }
+
+    function syncCurrentStatusGames() {
+        gamesByStatus = allGames.filter((g) => g.status === currentStatus);
+    }
+
+    function renderLibraryState() {
+        syncCurrentStatusGames();
+        hydrateStats(allGames);
+        hydrateGenres(allGames);
+        renderGamesList();
+    }
+
     async function loadGames() {
         grid.innerHTML = `
             <div class="col-span-full absolute inset-0 flex flex-col items-center justify-center">
@@ -188,12 +206,13 @@ export async function renderLibrary(container: HTMLElement) {
         `;
 
         try {
-            allGames = await api.getGames();
-            gamesByStatus = allGames.filter((g) => g.status === currentStatus);
-            await hydrateProfileProgress(gamesByStatus);
-            hydrateStats(allGames);
-            hydrateGenres(allGames);
-            renderGamesList();
+            const [games, progressItems] = await Promise.all([
+                api.getGames(),
+                api.getGameProgressSummary()
+            ]);
+            allGames = games;
+            hydrateProfileProgress(progressItems);
+            renderLibraryState();
         } catch {
             grid.innerHTML = `<div class="col-span-full text-center py-12 text-rose-300">Ошибка загрузки игр</div>`;
         }
@@ -258,53 +277,6 @@ export async function renderLibrary(container: HTMLElement) {
             selectedGenre = '';
             genreLabel.textContent = 'Все жанры';
         }
-    }
-
-    function calcProgressPercent(completed: number, total: number): number {
-        if (total <= 0) return 0;
-        return Math.round((completed / total) * 100);
-    }
-
-    async function computeProfileProgress(game: Game): Promise<number> {
-        try {
-            if (game.sync_type === 'steam') {
-                const [checklists, achievements] = await Promise.all([
-                    api.getChecklist(game.id),
-                    api.getAchievements(game.id)
-                ]);
-
-                const questPercent = calcProgressPercent(
-                    checklists.filter((c) => c.completed).length,
-                    checklists.length
-                );
-                const achPercent = calcProgressPercent(
-                    achievements.filter((a) => a.completed).length,
-                    achievements.length
-                );
-
-                if (checklists.length === 0 && achievements.length === 0) return 0;
-                if (checklists.length === 0) return achPercent;
-                if (achievements.length === 0) return questPercent;
-                return Math.round((questPercent + achPercent) / 2);
-            }
-
-            const checklists = await api.getChecklist(game.id);
-            return calcProgressPercent(
-                checklists.filter((c) => c.completed).length,
-                checklists.length
-            );
-        } catch {
-            return 0;
-        }
-    }
-
-    async function hydrateProfileProgress(games: Game[]) {
-        await Promise.all(
-            games.map(async (game) => {
-                const progress = await computeProfileProgress(game);
-                profileProgressByGameId.set(game.id, progress);
-            })
-        );
     }
 
     function renderGamesList() {
@@ -412,7 +384,7 @@ export async function renderLibrary(container: HTMLElement) {
             target.classList.add('bg-cyan-500/20', 'text-cyan-200', 'border-cyan-400/30', 'active-tab');
 
             currentStatus = target.getAttribute('data-status') || 'playing';
-            loadGames();
+            renderLibraryState();
         });
 
         btn.addEventListener('dragover', (e) => {
@@ -438,8 +410,13 @@ export async function renderLibrary(container: HTMLElement) {
 
             if (gameId && newStatus && newStatus !== currentStatus) {
                 try {
-                    await api.updateGame(parseInt(gameId, 10), { status: newStatus });
-                    loadGames();
+                    const parsedGameId = parseInt(gameId, 10);
+                    const updatedGame = await api.updateGame(parsedGameId, { status: newStatus });
+                    const gameIndex = allGames.findIndex((item) => item.id === parsedGameId);
+                    if (gameIndex >= 0) {
+                        allGames[gameIndex] = updatedGame;
+                    }
+                    renderLibraryState();
                 } catch {
                     showNotification('Не удалось переместить игру', 'error');
                 }
