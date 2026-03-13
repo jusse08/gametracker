@@ -12,6 +12,7 @@ class SettingsStoreLike(Protocol):
     def set_access_expires_at(self, ts: int) -> None: ...
     def get_access_expires_at(self) -> int: ...
     def set_device_name(self, name: str) -> None: ...
+    def set_server_url(self, server_url: str) -> None: ...
     def save(self) -> None: ...
 
 
@@ -31,6 +32,11 @@ def apply_agent_auth_payload(settings_store: SettingsStoreLike, payload: Dict) -
         settings_store.set_device_name(device_name)
     settings_store.set_access_expires_at(expires_at)
     settings_store.save()
+
+
+def apply_agent_pairing_payload(settings_store: SettingsStoreLike, server_url: str, payload: Dict) -> None:
+    settings_store.set_server_url(server_url)
+    apply_agent_auth_payload(settings_store, payload)
 
 
 def refresh_if_needed(

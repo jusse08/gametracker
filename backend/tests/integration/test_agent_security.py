@@ -1,9 +1,10 @@
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.api.routers import agent as agent_router
+
+pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture(autouse=True)
@@ -15,8 +16,8 @@ def reset_pair_rate_limit_state():
         agent_router.PAIR_ATTEMPTS.clear()
 
 
-def _create_non_steam_game(client: TestClient, auth_headers: dict) -> int:
-    response = client.post(
+async def _create_non_steam_game(client, auth_headers: dict) -> int:
+    response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={"title": f"Agent Security Game {uuid4()}", "status": "playing", "sync_type": "non_steam"},
@@ -25,8 +26,8 @@ def _create_non_steam_game(client: TestClient, auth_headers: dict) -> int:
     return response.json()["id"]
 
 
-def test_configure_agent_rejects_dangerous_launch_paths(client: TestClient, auth_headers: dict):
-    game_id = _create_non_steam_game(client, auth_headers)
+async def test_configure_agent_rejects_dangerous_launch_paths(client, auth_headers: dict):
+    game_id = await _create_non_steam_game(client, auth_headers)
 
     bad_paths = [
         "",
@@ -38,7 +39,7 @@ def test_configure_agent_rejects_dangerous_launch_paths(client: TestClient, auth
     ]
 
     for launch_path in bad_paths:
-        res = client.post(
+        res = await client.post(
             "/api/agent/configure",
             headers=auth_headers,
             json={"game_id": game_id, "launch_path": launch_path, "enabled": True},
@@ -46,10 +47,10 @@ def test_configure_agent_rejects_dangerous_launch_paths(client: TestClient, auth
         assert res.status_code == 400, (launch_path, res.text)
 
 
-def test_configure_agent_accepts_absolute_windows_exe_path(client: TestClient, auth_headers: dict):
-    game_id = _create_non_steam_game(client, auth_headers)
+async def test_configure_agent_accepts_absolute_windows_exe_path(client, auth_headers: dict):
+    game_id = await _create_non_steam_game(client, auth_headers)
 
-    res = client.post(
+    res = await client.post(
         "/api/agent/configure",
         headers=auth_headers,
         json={"game_id": game_id, "launch_path": r"C:\\Games\\CoolGame\\game.exe", "enabled": True},
@@ -59,10 +60,10 @@ def test_configure_agent_accepts_absolute_windows_exe_path(client: TestClient, a
     assert data["exe_name"].lower() == "game.exe"
 
 
-def test_configure_agent_accepts_windows_path_with_forward_slashes(client: TestClient, auth_headers: dict):
-    game_id = _create_non_steam_game(client, auth_headers)
+async def test_configure_agent_accepts_windows_path_with_forward_slashes(client, auth_headers: dict):
+    game_id = await _create_non_steam_game(client, auth_headers)
 
-    res = client.post(
+    res = await client.post(
         "/api/agent/configure",
         headers=auth_headers,
         json={"game_id": game_id, "launch_path": "C:/Games/CoolGame/game.exe", "enabled": True},
@@ -72,18 +73,18 @@ def test_configure_agent_accepts_windows_path_with_forward_slashes(client: TestC
     assert data["launch_path"] == r"C:\Games\CoolGame\game.exe"
 
 
-def test_configure_agent_rejects_duplicate_launch_path(client: TestClient, auth_headers: dict):
-    first_game_id = _create_non_steam_game(client, auth_headers)
-    second_game_id = _create_non_steam_game(client, auth_headers)
+async def test_configure_agent_rejects_duplicate_launch_path(client, auth_headers: dict):
+    first_game_id = await _create_non_steam_game(client, auth_headers)
+    second_game_id = await _create_non_steam_game(client, auth_headers)
 
-    first = client.post(
+    first = await client.post(
         "/api/agent/configure",
         headers=auth_headers,
         json={"game_id": first_game_id, "launch_path": r"C:\Games\Shared\game.exe", "enabled": True},
     )
     assert first.status_code == 200, first.text
 
-    duplicate = client.post(
+    duplicate = await client.post(
         "/api/agent/configure",
         headers=auth_headers,
         json={"game_id": second_game_id, "launch_path": r"C:\Games\Shared\game.exe", "enabled": True},
@@ -91,13 +92,13 @@ def test_configure_agent_rejects_duplicate_launch_path(client: TestClient, auth_
     assert duplicate.status_code == 409, duplicate.text
 
 
-def test_agent_pair_refresh_and_revoke_flow(client: TestClient, auth_headers: dict):
-    pair_code_response = client.post("/api/agent/pair-code", headers=auth_headers)
+async def test_agent_pair_refresh_and_revoke_flow(client, auth_headers: dict):
+    pair_code_response = await client.post("/api/agent/pair-code", headers=auth_headers)
     assert pair_code_response.status_code == 200, pair_code_response.text
     pair_code = pair_code_response.json()["pair_code"]
 
     device_id = "gt-test-device-000001"
-    pair_response = client.post(
+    pair_response = await client.post(
         "/api/agent/pair",
         json={
             "pair_code": pair_code,
@@ -110,13 +111,13 @@ def test_agent_pair_refresh_and_revoke_flow(client: TestClient, auth_headers: di
     access_token = payload["access_token"]
     refresh_token = payload["refresh_token"]
 
-    config_response = client.get(
+    config_response = await client.get(
         "/api/agent/config",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     assert config_response.status_code == 200, config_response.text
 
-    refresh_response = client.post(
+    refresh_response = await client.post(
         "/api/agent/auth/refresh",
         json={"device_id": device_id, "refresh_token": refresh_token},
     )
@@ -125,27 +126,27 @@ def test_agent_pair_refresh_and_revoke_flow(client: TestClient, auth_headers: di
     assert refreshed["device_id"] == device_id
     assert refreshed["refresh_token"] != refresh_token
 
-    list_devices = client.get("/api/agent/devices", headers=auth_headers)
+    list_devices = await client.get("/api/agent/devices", headers=auth_headers)
     assert list_devices.status_code == 200, list_devices.text
     assert any(item["device_id"] == device_id for item in list_devices.json())
 
-    revoke_response = client.post(f"/api/agent/devices/{device_id}/revoke", headers=auth_headers)
+    revoke_response = await client.post(f"/api/agent/devices/{device_id}/revoke", headers=auth_headers)
     assert revoke_response.status_code == 200, revoke_response.text
 
-    refresh_after_revoke = client.post(
+    refresh_after_revoke = await client.post(
         "/api/agent/auth/refresh",
         json={"device_id": device_id, "refresh_token": refreshed["refresh_token"]},
     )
     assert refresh_after_revoke.status_code == 401, refresh_after_revoke.text
 
 
-def test_agent_device_self_name_update_flow(client: TestClient, auth_headers: dict):
-    pair_code_response = client.post("/api/agent/pair-code", headers=auth_headers)
+async def test_agent_device_self_name_update_flow(client, auth_headers: dict):
+    pair_code_response = await client.post("/api/agent/pair-code", headers=auth_headers)
     assert pair_code_response.status_code == 200, pair_code_response.text
     pair_code = pair_code_response.json()["pair_code"]
 
     device_id = f"gt-test-device-{uuid4().hex[:12]}"
-    pair_response = client.post(
+    pair_response = await client.post(
         "/api/agent/pair",
         json={
             "pair_code": pair_code,
@@ -156,7 +157,7 @@ def test_agent_device_self_name_update_flow(client: TestClient, auth_headers: di
     assert pair_response.status_code == 200, pair_response.text
     access_token = pair_response.json()["access_token"]
 
-    update_response = client.put(
+    update_response = await client.put(
         "/api/agent/device/self",
         headers={"Authorization": f"Bearer {access_token}"},
         json={"device_name": "Renamed Device"},
@@ -167,20 +168,20 @@ def test_agent_device_self_name_update_flow(client: TestClient, auth_headers: di
     assert updated_payload["device_id"] == device_id
     assert updated_payload["device_name"] == "Renamed Device"
 
-    list_devices = client.get("/api/agent/devices", headers=auth_headers)
+    list_devices = await client.get("/api/agent/devices", headers=auth_headers)
     assert list_devices.status_code == 200, list_devices.text
     rows = [item for item in list_devices.json() if item["device_id"] == device_id]
     assert rows, "paired device is missing in /api/agent/devices"
     assert rows[0]["device_name"] == "Renamed Device"
 
 
-def test_agent_device_self_name_update_requires_agent_token(client: TestClient, auth_headers: dict):
-    pair_code_response = client.post("/api/agent/pair-code", headers=auth_headers)
+async def test_agent_device_self_name_update_requires_agent_token(client, auth_headers: dict):
+    pair_code_response = await client.post("/api/agent/pair-code", headers=auth_headers)
     assert pair_code_response.status_code == 200, pair_code_response.text
     pair_code = pair_code_response.json()["pair_code"]
 
     device_id = f"gt-test-device-{uuid4().hex[:12]}"
-    pair_response = client.post(
+    pair_response = await client.post(
         "/api/agent/pair",
         json={
             "pair_code": pair_code,
@@ -190,10 +191,10 @@ def test_agent_device_self_name_update_requires_agent_token(client: TestClient, 
     )
     assert pair_response.status_code == 200, pair_response.text
 
-    no_auth = client.put("/api/agent/device/self", json={"device_name": "X"})
+    no_auth = await client.put("/api/agent/device/self", json={"device_name": "X"})
     assert no_auth.status_code == 401, no_auth.text
 
-    user_jwt_auth = client.put(
+    user_jwt_auth = await client.put(
         "/api/agent/device/self",
         headers=auth_headers,
         json={"device_name": "X"},
@@ -201,9 +202,9 @@ def test_agent_device_self_name_update_requires_agent_token(client: TestClient, 
     assert user_jwt_auth.status_code == 401, user_jwt_auth.text
 
 
-def test_agent_pair_rate_limit_blocks_bruteforce(client: TestClient):
+async def test_agent_pair_rate_limit_blocks_bruteforce(client):
     for _ in range(agent_router.AGENT_PAIR_MAX_ATTEMPTS - 1):
-        response = client.post(
+        response = await client.post(
             "/api/agent/pair",
             json={
                 "pair_code": "000000",
@@ -213,7 +214,7 @@ def test_agent_pair_rate_limit_blocks_bruteforce(client: TestClient):
         )
         assert response.status_code == 401, response.text
 
-    blocked = client.post(
+    blocked = await client.post(
         "/api/agent/pair",
         json={
             "pair_code": "000000",

@@ -1,8 +1,9 @@
-from datetime import datetime
 from typing import Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 import requests
+
+from time_utils import utc_now_isoformat
 
 
 def build_ws_url(server_url: str, agent_token: str) -> str:
@@ -210,7 +211,7 @@ def ping_server(
     payload = {
         "game_id": game_id,
         "exe_name": exe_name,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utc_now_isoformat(),
     }
     try:
         response = requests.post(

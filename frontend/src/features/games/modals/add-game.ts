@@ -1,4 +1,5 @@
 import { api } from '../../../shared/api';
+import { loadGamesWithCache, upsertCachedGame } from '../../../shared/state/games-store';
 import { showNotification } from '../../../shared/ui';
 import { pickSteamPoster } from '../../../shared/lib/steam-images';
 
@@ -126,7 +127,7 @@ export function mountAddGameModal() {
         try {
             const [steam, existingGames] = await Promise.all([
                 api.searchSteam(query),
-                api.getGames()
+                loadGamesWithCache()
             ]);
 
             const results = steam;
@@ -216,20 +217,16 @@ export function mountAddGameModal() {
 
                     try {
                         const targetPoster = pickSteamPoster(targetGame);
-                        await api.createGame({
+                        const createdGame = await api.createGame({
                             title: targetGame.title,
                             sync_type: syncType,
                             steam_app_id: targetGame.steam_app_id,
                             cover_url: targetPoster.src || targetGame.cover_url || '',
                             status: 'backlog'
                         });
+                        upsertCachedGame(createdGame);
 
                         markButtonsAsAlreadyAdded(siblingButtons);
-
-                        // Refetch library if shown
-                        if (window.location.hash === '' || window.location.hash === '#library') {
-                            window.dispatchEvent(new Event('hashchange'));
-                        }
                     } catch(e) {
                          showNotification('Ошибка добавления', 'error');
                          siblingButtons.forEach(button => {

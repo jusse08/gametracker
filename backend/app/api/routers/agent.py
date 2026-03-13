@@ -6,8 +6,9 @@ import os
 import re
 import secrets
 import threading
+import time
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any, Dict, List, Optional, Set
 from uuid import uuid4
 
@@ -158,7 +159,7 @@ def _cleanup_pair_attempts(attempts: deque[float], now_ts: float) -> None:
 
 
 def _count_pair_failures(client_ip: str) -> int:
-    now_ts = datetime.now().timestamp()
+    now_ts = time.time()
     with PAIR_ATTEMPTS_LOCK:
         attempts = PAIR_ATTEMPTS.get(client_ip)
         if not attempts:
@@ -171,7 +172,7 @@ def _count_pair_failures(client_ip: str) -> int:
 
 
 def _register_pair_failure(client_ip: str) -> int:
-    now_ts = datetime.now().timestamp()
+    now_ts = time.time()
     with PAIR_ATTEMPTS_LOCK:
         attempts = PAIR_ATTEMPTS.setdefault(client_ip, deque())
         _cleanup_pair_attempts(attempts, now_ts)

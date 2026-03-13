@@ -44,7 +44,7 @@ class SettingsUI:
         is_autostart_enabled_windows_fn: Callable[[], bool],
         validate_server_url_fn: Callable[[str], tuple[str, str | None]],
         pair_agent_device_fn: Callable[[str, str, str, str], tuple[dict | None, str | None]],
-        apply_agent_auth_payload_fn: Callable[[Any, dict], None],
+        apply_agent_pairing_payload_fn: Callable[[Any, str, dict], None],
         update_agent_device_name_fn: Callable[[str, str, str], str | None],
         set_autostart_windows_fn: Callable[[bool], tuple[bool, str]],
         debug_log_fn: Callable[[str, str], None],
@@ -61,7 +61,7 @@ class SettingsUI:
         self._is_autostart_enabled_windows = is_autostart_enabled_windows_fn
         self._validate_server_url = validate_server_url_fn
         self._pair_agent_device = pair_agent_device_fn
-        self._apply_agent_auth_payload = apply_agent_auth_payload_fn
+        self._apply_agent_pairing_payload = apply_agent_pairing_payload_fn
         self._update_agent_device_name = update_agent_device_name_fn
         self._set_autostart_windows = set_autostart_windows_fn
         self._debug_log = debug_log_fn
@@ -645,7 +645,7 @@ class SettingsUI:
                 self._debug_log("UI", f"Pair failed: {err}")
                 QMessageBox.critical(self.window, "Pairing", f"Pair failed: {err}")
                 return
-            self._apply_agent_auth_payload(self.settings_store, payload or {})
+            self._apply_agent_pairing_payload(self.settings_store, valid_server_url, payload or {})
             self.token_entry.setText("")
             self.server_entry.setText(valid_server_url)
             self.device_id_entry.setText(self.settings_store.get_device_id())

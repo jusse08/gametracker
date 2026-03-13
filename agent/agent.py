@@ -249,6 +249,10 @@ def apply_agent_auth_payload(settings_store: SettingsStore, payload: Dict) -> No
     auth_flow.apply_agent_auth_payload(settings_store, payload)
 
 
+def apply_agent_pairing_payload(settings_store: SettingsStore, server_url: str, payload: Dict) -> None:
+    auth_flow.apply_agent_pairing_payload(settings_store, server_url, payload)
+
+
 def refresh_if_needed(settings_store: SettingsStore, server_url: str, force: bool = False) -> Tuple[str, Optional[str]]:
     return auth_flow.refresh_if_needed(
         settings_store=settings_store,
@@ -415,7 +419,7 @@ def main() -> None:
         is_autostart_enabled_windows_fn=is_autostart_enabled_windows,
         validate_server_url_fn=validate_server_url,
         pair_agent_device_fn=pair_agent_device,
-        apply_agent_auth_payload_fn=apply_agent_auth_payload,
+        apply_agent_pairing_payload_fn=apply_agent_pairing_payload,
         update_agent_device_name_fn=update_agent_device_name,
         set_autostart_windows_fn=set_autostart_windows,
         debug_log_fn=debug_log,

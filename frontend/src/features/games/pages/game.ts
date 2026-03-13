@@ -1,4 +1,5 @@
 import { api, type QuestCategory } from '../../../shared/api';
+import { loadGamesWithCache, removeCachedGame, upsertCachedGame } from '../../../shared/state/games-store';
 import { showConfirmDialog, showInputDialog, showNotification } from '../../../shared/ui';
 import { pickSteamHero, pickSteamPoster } from '../../../shared/lib/steam-images';
 
@@ -254,7 +255,7 @@ async function openAgentSettingsModal(
     gameId: number,
     currentLaunchPath: string,
     onPingCompleted: () => Promise<void>,
-    onSaved: () => Promise<void>
+    onSaved: (config: { launch_path?: string; exe_name: string }) => Promise<void>
 ) {
     const root = document.getElementById('modal-root');
     if (!root) {
@@ -328,7 +329,7 @@ async function openAgentSettingsModal(
         btn.textContent = 'Сохранение...';
         btn.disabled = true;
         try {
-            const allGames = await api.getGames();
+            const allGames = await loadGamesWithCache();
             const normalizedInputPath = normalizeLaunchPathForCompare(launchPath);
             const duplicateGame = allGames.find((item) => {
                 if (item.id === gameId || !item.launch_path) return false;
@@ -343,10 +344,10 @@ async function openAgentSettingsModal(
                 return;
             }
 
-            await api.configureAgent(gameId, launchPath, true);
+            const config = await api.configureAgent(gameId, launchPath, true);
             showNotification('Настройки агента сохранены.', 'success');
             closeModal();
-            await onSaved();
+            await onSaved({ launch_path: config.launch_path, exe_name: config.exe_name });
         } catch (err: any) {
             showNotification(err.message || 'Ошибка настройки агента.', 'error');
         } finally {
@@ -617,10 +618,10 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
 
         await Promise.all([
             loadChecklists(gameId),
-            game.sync_type === 'steam' ? loadAchievements(gameId) : Promise.resolve(),
+            game.sync_type === 'steam' ? loadAchievements(gameId, game.sync_type) : Promise.resolve(),
             loadNotes(gameId),
             loadHistory(gameId),
-            updateProgressBar(gameId)
+            updateProgressBar(gameId, game.sync_type)
         ]);
 
         // Bindings
@@ -628,7 +629,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             try {
                 await openQuestActionsModal(gameId, async () => {
                     await loadChecklists(gameId);
-                    await updateProgressBar(gameId);
+                    await updateProgressBar(gameId, game.sync_type);
                 });
             } catch (err: any) {
                 showNotification(err?.message || 'Не удалось открыть окно действий.', 'error');
@@ -650,8 +651,8 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                     }
                 }
 
-                await loadAchievements(gameId);
-                await updateProgressBar(gameId);
+                await loadAchievements(gameId, game.sync_type);
+                await updateProgressBar(gameId, game.sync_type);
             } catch (err) {
                 showNotification('Ошибка при синхронизации со Steam. Проверьте настройки API Key и доступ к интернету.', 'error');
             } finally {
@@ -672,6 +673,8 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
 
         const gameHash = `#game/${gameId}`;
         const liveRefreshIntervalMs = 10000;
+        const visibilityRefreshMinGapMs = 5000;
+        let lastRefreshCompletedAt = Date.now();
         let refreshInFlight = false;
         const runLiveRefresh = async () => {
             if (refreshInFlight) return;
@@ -679,6 +682,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             refreshInFlight = true;
             try {
                 await refreshPlaytimeAndHistory();
+                lastRefreshCompletedAt = Date.now();
             } catch {
                 // Silent refresh should not distract the user with periodic toasts.
             } finally {
@@ -691,6 +695,9 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
         }, liveRefreshIntervalMs);
         const onVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
+                if ((Date.now() - lastRefreshCompletedAt) < visibilityRefreshMinGapMs) {
+                    return;
+                }
                 void runLiveRefresh();
             }
         };
@@ -740,7 +747,14 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                     gameId,
                     game.launch_path || '',
                     refreshPlaytimeAndHistory,
-                    async () => renderGamePage(container, gameId)
+                    async (config) => {
+                        game = {
+                            ...game,
+                            launch_path: config.launch_path ?? game.launch_path,
+                            exe_name: config.exe_name || game.exe_name,
+                        };
+                        upsertCachedGame(game);
+                    }
                 );
             } catch (err: any) {
                 showNotification(err?.message || 'Не удалось открыть настройки агента.', 'error');
@@ -753,6 +767,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                 if (!value || value < 1 || value > 5) return;
                 try {
                     game = await api.updateGame(gameId, { personal_rating: value });
+                    upsertCachedGame(game);
                     const currentRating = game.personal_rating || 0;
                     container.querySelectorAll('.rate-star').forEach((btn) => {
                         const button = btn as HTMLButtonElement;
@@ -804,6 +819,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
 
             try {
                 await api.deleteGame(gameId);
+                removeCachedGame(gameId);
                 window.location.hash = '#library';
             } catch (err) {
                 showNotification('Ошибка при удалении игры', 'error');
@@ -1076,9 +1092,9 @@ async function loadNotes(gameId: number) {
     }
 }
 
-async function loadAchievements(gameId: number) {
+async function loadAchievements(gameId: number, syncType?: string) {
     const [game, achievements] = await Promise.all([
-        api.getGame(gameId),
+        syncType ? Promise.resolve({ sync_type: syncType }) : api.getGame(gameId),
         api.getAchievements(gameId)
     ]);
     const container = document.getElementById('achievementsContainer');
@@ -1117,9 +1133,8 @@ async function loadAchievements(gameId: number) {
     });
 }
 
-async function updateProgressBar(gameId: number) {
-    const [game, checklists, achievements] = await Promise.all([
-        api.getGame(gameId),
+async function updateProgressBar(gameId: number, syncType?: string) {
+    const [checklists, achievements] = await Promise.all([
         api.getChecklist(gameId),
         api.getAchievements(gameId)
     ]);
@@ -1128,7 +1143,7 @@ async function updateProgressBar(gameId: number) {
     const questCompleted = checklists.filter(c => c.completed).length;
     const questPercent = questTotal === 0 ? 0 : Math.round((questCompleted / questTotal) * 100);
 
-    const isSteamSync = game.sync_type === 'steam';
+    const isSteamSync = syncType === 'steam';
     const achievementTotal = isSteamSync ? achievements.length : 0;
     const achievementCompleted = isSteamSync ? achievements.filter(a => a.completed).length : 0;
     const achievementPercent = achievementTotal === 0 ? 0 : Math.round((achievementCompleted / achievementTotal) * 100);

@@ -1,6 +1,14 @@
 import { api, type Game, type GameProgressSummaryItem } from '../../../shared/api';
 import { showNotification } from '../../../shared/ui';
 import { pickSteamPoster } from '../../../shared/lib/steam-images';
+import {
+    GAMES_CHANGED_EVENT,
+    loadGamesWithCache,
+    removeCachedGame,
+    replaceCachedGames,
+    upsertCachedGame,
+    type GamesChangedDetail,
+} from '../../../shared/state/games-store';
 
 function escapeHtml(value: string): string {
     return value
@@ -131,6 +139,7 @@ export async function renderLibrary(container: HTMLElement) {
     let searchText = '';
     let selectedGenre = '';
     let sortBy = 'created-desc';
+    let lastLoadCompletedAt = 0;
     const listenersAbort = new AbortController();
     const sortLabels: Record<string, string> = {
         'created-desc': 'Сначала новые',
@@ -197,7 +206,7 @@ export async function renderLibrary(container: HTMLElement) {
         renderGamesList();
     }
 
-    async function loadGames() {
+    async function loadGames(force = false) {
         grid.innerHTML = `
             <div class="col-span-full absolute inset-0 flex flex-col items-center justify-center">
                 <div class="loader-spinner mb-3"></div>
@@ -207,12 +216,13 @@ export async function renderLibrary(container: HTMLElement) {
 
         try {
             const [games, progressItems] = await Promise.all([
-                api.getGames(),
+                loadGamesWithCache({ force }),
                 api.getGameProgressSummary()
             ]);
-            allGames = games;
+            allGames = replaceCachedGames(games, { emitEvent: false });
             hydrateProfileProgress(progressItems);
             renderLibraryState();
+            lastLoadCompletedAt = Date.now();
         } catch {
             grid.innerHTML = `<div class="col-span-full text-center py-12 text-rose-300">Ошибка загрузки игр</div>`;
         }
@@ -416,6 +426,7 @@ export async function renderLibrary(container: HTMLElement) {
                     if (gameIndex >= 0) {
                         allGames[gameIndex] = updatedGame;
                     }
+                    upsertCachedGame(updatedGame, { emitEvent: false });
                     renderLibraryState();
                 } catch {
                     showNotification('Не удалось переместить игру', 'error');
@@ -502,14 +513,35 @@ export async function renderLibrary(container: HTMLElement) {
         }
     }, { signal: listenersAbort.signal });
 
+    window.addEventListener(GAMES_CHANGED_EVENT, ((event: Event) => {
+        const detail = (event as CustomEvent<GamesChangedDetail>).detail;
+        if (!detail) return;
+        if (detail.type === 'replace') {
+            allGames = detail.games;
+        } else if (detail.type === 'upsert') {
+            const index = allGames.findIndex((item) => item.id === detail.game.id);
+            if (index >= 0) {
+                allGames[index] = detail.game;
+            } else {
+                allGames = [...allGames, detail.game];
+            }
+        } else if (detail.type === 'remove') {
+            allGames = removeCachedGame(detail.gameId, { emitEvent: false });
+        } else {
+            return;
+        }
+        renderLibraryState();
+    }) as EventListener, { signal: listenersAbort.signal });
+
     const liveRefreshIntervalMs = 15000;
+    const visibilityRefreshMinGapMs = 5000;
     let liveRefreshInFlight = false;
     const runLiveRefresh = async () => {
         if (liveRefreshInFlight) return;
         if (window.location.hash !== '#library') return;
         liveRefreshInFlight = true;
         try {
-            await loadGames();
+            await loadGames(true);
         } finally {
             liveRefreshInFlight = false;
         }
@@ -524,7 +556,10 @@ export async function renderLibrary(container: HTMLElement) {
     }, { once: true });
     const onVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
-            void runLiveRefresh();
+            if ((Date.now() - lastLoadCompletedAt) < visibilityRefreshMinGapMs) {
+                return;
+            }
+            void loadGames(false);
         }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
@@ -533,5 +568,5 @@ export async function renderLibrary(container: HTMLElement) {
 
     setSortValue(sortBy);
     loadHeroFact();
-    loadGames();
+    loadGames(false);
 }

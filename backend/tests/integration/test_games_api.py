@@ -1,26 +1,29 @@
+import pytest
 from sqlmodel import Session, select
 
 from app.api.routers import games as games_router
 from app.core.database import engine
 from app.domain.models import Achievement, ChecklistItem, QuestCategory
 
+pytestmark = pytest.mark.anyio
 
-def test_healthcheck(client):
-    response = client.get("/health")
+
+async def test_healthcheck(client):
+    response = await client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"ok": True}
     assert response.headers.get("x-content-type-options") == "nosniff"
     assert response.headers.get("x-frame-options") == "DENY"
 
 
-def test_readiness_check(client):
-    response = client.get("/ready")
+async def test_readiness_check(client):
+    response = await client.get("/ready")
     assert response.status_code == 200
     assert response.json() == {"ok": True}
 
 
-def test_create_game_and_import_wiki_items(client, auth_headers, monkeypatch):
-    create_response = client.post(
+async def test_create_game_and_import_wiki_items(client, auth_headers, monkeypatch):
+    create_response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={"title": "Test Game", "status": "playing", "sync_type": "non_steam"},
@@ -37,7 +40,7 @@ def test_create_game_and_import_wiki_items(client, auth_headers, monkeypatch):
         ],
     )
 
-    import_response = client.post(
+    import_response = await client.post(
         f"/api/games/{game_id}/import/wiki",
         headers=auth_headers,
         json={"url": "https://example.com/wiki"},
@@ -51,8 +54,8 @@ def test_create_game_and_import_wiki_items(client, auth_headers, monkeypatch):
     assert imported_items[1]["category"] == "Side Quest"
 
 
-def test_read_checklist_categories_does_not_mutate_database(client, auth_headers):
-    create_response = client.post(
+async def test_read_checklist_categories_does_not_mutate_database(client, auth_headers):
+    create_response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={"title": "Category Read Game", "status": "playing", "sync_type": "non_steam"},
@@ -64,7 +67,7 @@ def test_read_checklist_categories_does_not_mutate_database(client, auth_headers
         session.add(ChecklistItem(game_id=game_id, title="Legacy Item", category="Legacy Category", sort_order=0))
         session.commit()
 
-    response = client.get(f"/api/games/{game_id}/checklist/categories", headers=auth_headers)
+    response = await client.get(f"/api/games/{game_id}/checklist/categories", headers=auth_headers)
     assert response.status_code == 200, response.text
     assert response.json() == []
 
@@ -73,8 +76,8 @@ def test_read_checklist_categories_does_not_mutate_database(client, auth_headers
         assert categories == []
 
 
-def test_delete_checklist_category_is_case_insensitive(client, auth_headers):
-    create_response = client.post(
+async def test_delete_checklist_category_is_case_insensitive(client, auth_headers):
+    create_response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={"title": "Category Delete Game", "status": "playing", "sync_type": "non_steam"},
@@ -82,38 +85,38 @@ def test_delete_checklist_category_is_case_insensitive(client, auth_headers):
     assert create_response.status_code == 200, create_response.text
     game_id = create_response.json()["id"]
 
-    category_response = client.post(
+    category_response = await client.post(
         f"/api/games/{game_id}/checklist/categories",
         headers=auth_headers,
         json={"name": "Main Quest"},
     )
     assert category_response.status_code == 200, category_response.text
 
-    item_response = client.post(
+    item_response = await client.post(
         f"/api/games/{game_id}/checklist",
         headers=auth_headers,
         json={"title": "Find relic", "category": "Main Quest"},
     )
     assert item_response.status_code == 200, item_response.text
 
-    delete_response = client.delete(
+    delete_response = await client.delete(
         f"/api/games/{game_id}/checklist/category/main quest",
         headers=auth_headers,
     )
     assert delete_response.status_code == 200, delete_response.text
     assert delete_response.json()["deleted_count"] == 1
 
-    checklist_response = client.get(f"/api/games/{game_id}/checklist", headers=auth_headers)
+    checklist_response = await client.get(f"/api/games/{game_id}/checklist", headers=auth_headers)
     assert checklist_response.status_code == 200, checklist_response.text
     assert checklist_response.json() == []
 
-    categories_response = client.get(f"/api/games/{game_id}/checklist/categories", headers=auth_headers)
+    categories_response = await client.get(f"/api/games/{game_id}/checklist/categories", headers=auth_headers)
     assert categories_response.status_code == 200, categories_response.text
     assert categories_response.json() == []
 
 
-def test_game_progress_summary_is_aggregated_in_single_response(client, auth_headers):
-    steam_response = client.post(
+async def test_game_progress_summary_is_aggregated_in_single_response(client, auth_headers):
+    steam_response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={
@@ -126,7 +129,7 @@ def test_game_progress_summary_is_aggregated_in_single_response(client, auth_hea
     assert steam_response.status_code == 200, steam_response.text
     steam_game_id = steam_response.json()["id"]
 
-    non_steam_response = client.post(
+    non_steam_response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={"title": "Quest Progress Game", "status": "playing", "sync_type": "non_steam"},
@@ -143,7 +146,7 @@ def test_game_progress_summary_is_aggregated_in_single_response(client, auth_hea
         session.add(ChecklistItem(game_id=non_steam_game_id, title="Task 2", category="Main", completed=False, sort_order=1))
         session.commit()
 
-    response = client.get("/api/games/progress-summary", headers=auth_headers)
+    response = await client.get("/api/games/progress-summary", headers=auth_headers)
     assert response.status_code == 200, response.text
     items = {item["game_id"]: item for item in response.json()["items"]}
 
@@ -160,8 +163,8 @@ def test_game_progress_summary_is_aggregated_in_single_response(client, auth_hea
     assert items[non_steam_game_id]["progress_percent"] == 50
 
 
-def test_update_checklist_item_uses_json_body(client, auth_headers):
-    create_response = client.post(
+async def test_update_checklist_item_uses_json_body(client, auth_headers):
+    create_response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={"title": "Checklist Body Game", "status": "playing", "sync_type": "non_steam"},
@@ -169,7 +172,7 @@ def test_update_checklist_item_uses_json_body(client, auth_headers):
     assert create_response.status_code == 200, create_response.text
     game_id = create_response.json()["id"]
 
-    item_response = client.post(
+    item_response = await client.post(
         f"/api/games/{game_id}/checklist",
         headers=auth_headers,
         json={"title": "Find relic", "category": "Main Quest"},
@@ -177,10 +180,10 @@ def test_update_checklist_item_uses_json_body(client, auth_headers):
     assert item_response.status_code == 200, item_response.text
     item_id = item_response.json()["id"]
 
-    bad_response = client.put(f"/api/checklist/{item_id}?completed=true", headers=auth_headers)
+    bad_response = await client.put(f"/api/checklist/{item_id}?completed=true", headers=auth_headers)
     assert bad_response.status_code == 422, bad_response.text
 
-    update_response = client.put(
+    update_response = await client.put(
         f"/api/checklist/{item_id}",
         headers=auth_headers,
         json={"completed": True},
@@ -189,8 +192,8 @@ def test_update_checklist_item_uses_json_body(client, auth_headers):
     assert update_response.json()["completed"] is True
 
 
-def test_update_note_uses_json_body(client, auth_headers):
-    create_response = client.post(
+async def test_update_note_uses_json_body(client, auth_headers):
+    create_response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={"title": "Note Body Game", "status": "playing", "sync_type": "non_steam"},
@@ -198,7 +201,7 @@ def test_update_note_uses_json_body(client, auth_headers):
     assert create_response.status_code == 200, create_response.text
     game_id = create_response.json()["id"]
 
-    note_response = client.post(
+    note_response = await client.post(
         f"/api/games/{game_id}/notes",
         headers=auth_headers,
         json={"text": "Old note"},
@@ -206,13 +209,13 @@ def test_update_note_uses_json_body(client, auth_headers):
     assert note_response.status_code == 200, note_response.text
     note_id = note_response.json()["id"]
 
-    bad_response = client.put(
+    bad_response = await client.put(
         f"/api/notes/{note_id}?text=Updated%20from%20query",
         headers=auth_headers,
     )
     assert bad_response.status_code == 422, bad_response.text
 
-    update_response = client.put(
+    update_response = await client.put(
         f"/api/notes/{note_id}",
         headers=auth_headers,
         json={"text": "Updated from body"},
@@ -221,8 +224,8 @@ def test_update_note_uses_json_body(client, auth_headers):
     assert update_response.json()["text"] == "Updated from body"
 
 
-def test_progress_summary_handles_steam_games_without_checklist(client, auth_headers):
-    create_response = client.post(
+async def test_progress_summary_handles_steam_games_without_checklist(client, auth_headers):
+    create_response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={
@@ -240,7 +243,7 @@ def test_progress_summary_handles_steam_games_without_checklist(client, auth_hea
         session.add(Achievement(game_id=game_id, name="Ach 2", completed=False))
         session.commit()
 
-    response = client.get("/api/games/progress-summary", headers=auth_headers)
+    response = await client.get("/api/games/progress-summary", headers=auth_headers)
     assert response.status_code == 200, response.text
     items = {item["game_id"]: item for item in response.json()["items"]}
 
@@ -250,8 +253,8 @@ def test_progress_summary_handles_steam_games_without_checklist(client, auth_hea
     assert items[game_id]["progress_percent"] == 50
 
 
-def test_progress_summary_returns_zero_for_empty_games(client, auth_headers):
-    create_response = client.post(
+async def test_progress_summary_returns_zero_for_empty_games(client, auth_headers):
+    create_response = await client.post(
         "/api/games",
         headers=auth_headers,
         json={"title": "Empty Progress Game", "status": "playing", "sync_type": "non_steam"},
@@ -259,7 +262,7 @@ def test_progress_summary_returns_zero_for_empty_games(client, auth_headers):
     assert create_response.status_code == 200, create_response.text
     game_id = create_response.json()["id"]
 
-    response = client.get("/api/games/progress-summary", headers=auth_headers)
+    response = await client.get("/api/games/progress-summary", headers=auth_headers)
     assert response.status_code == 200, response.text
     items = {item["game_id"]: item for item in response.json()["items"]}
 

@@ -1,7 +1,11 @@
+import pytest
+
 from app.api.routers import facts as facts_router
 
+pytestmark = pytest.mark.anyio
 
-def test_read_random_fact(client, auth_headers, monkeypatch):
+
+async def test_read_random_fact(client, auth_headers, monkeypatch):
     monkeypatch.setattr(
         facts_router,
         "fetch_random_fandom_fact",
@@ -12,7 +16,7 @@ def test_read_random_fact(client, auth_headers, monkeypatch):
         },
     )
 
-    response = client.get("/api/facts/random", headers=auth_headers)
+    response = await client.get("/api/facts/random", headers=auth_headers)
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["source"] == "fandom"
@@ -20,7 +24,7 @@ def test_read_random_fact(client, auth_headers, monkeypatch):
     assert "Did you know?" in payload["text"]
 
 
-def test_rebuild_facts_for_superadmin(client, auth_headers, monkeypatch):
+async def test_rebuild_facts_for_superadmin(client, auth_headers, monkeypatch):
     monkeypatch.setattr(
         facts_router,
         "collect_fandom_facts",
@@ -32,7 +36,7 @@ def test_rebuild_facts_for_superadmin(client, auth_headers, monkeypatch):
         lambda facts: "/tmp/game_facts.json",
     )
 
-    response = client.post(
+    response = await client.post(
         "/api/facts/rebuild",
         headers=auth_headers,
         json={"per_seed_limit": 5, "max_facts": 10},
@@ -43,7 +47,7 @@ def test_rebuild_facts_for_superadmin(client, auth_headers, monkeypatch):
     assert payload["count"] == 1
 
 
-def test_rebuild_facts_from_single_page(client, auth_headers, monkeypatch):
+async def test_rebuild_facts_from_single_page(client, auth_headers, monkeypatch):
     monkeypatch.setattr(
         facts_router,
         "collect_facts_from_fandom_page",
@@ -62,7 +66,7 @@ def test_rebuild_facts_from_single_page(client, auth_headers, monkeypatch):
         lambda facts: "/tmp/game_facts.json",
     )
 
-    response = client.post(
+    response = await client.post(
         "/api/facts/rebuild",
         headers=auth_headers,
         json={

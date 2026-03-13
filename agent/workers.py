@@ -243,7 +243,7 @@ def agent_worker(
     refresh_if_needed_fn: Callable[[object, str], Tuple[str, Optional[str]]],
     validate_agent_token_fn: Callable[[str], Tuple[str, Optional[str]]],
     get_agent_config_fn: Callable[[str, str], Optional[List[Dict]]],
-    run_command_processor_fn: Callable[..., Tuple[int, int]],
+    run_command_processor_fn: Callable[[str, str, Optional[HandledRequests]], Tuple[int, int]],
     check_processes_and_ping_fn: Callable[[str, List[Dict], str, object], Tuple[int, int]],
     process_watcher: object,
     debug_log_fn: Callable[[str, str], None],
@@ -259,14 +259,7 @@ def agent_worker(
     handled_requests: HandledRequests = {}
 
     def _run_processor(server_url: str, token: str) -> Tuple[int, int]:
-        try:
-            return run_command_processor_fn(
-                server_url,
-                token,
-                handled_requests=handled_requests,
-            )
-        except TypeError:
-            return run_command_processor_fn(server_url, token)
+        return run_command_processor_fn(server_url, token, handled_requests)
 
     debug_log_fn("AGENT", "Agent worker started")
     while not stop_event.is_set():

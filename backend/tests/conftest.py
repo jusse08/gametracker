@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 from alembic.config import Config
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from alembic import command
 
@@ -21,6 +21,11 @@ os.environ["SECRET_KEY"] = "test-secret-key-change-me"
 from app.main import app  # noqa: E402
 
 
+@pytest.fixture(scope="session")
+def anyio_backend():
+    return "asyncio"
+
+
 def run_test_migrations() -> None:
     alembic_cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     alembic_cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
@@ -28,17 +33,19 @@ def run_test_migrations() -> None:
 
 
 @pytest.fixture(scope="session")
-def client():
+async def client():
     run_test_migrations()
-    with TestClient(app) as test_client:
-        yield test_client
+    transport = ASGITransport(app=app)
+    async with app.router.lifespan_context(app):
+        async with AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+            yield test_client
     if TEST_DB_PATH.exists():
         TEST_DB_PATH.unlink()
 
 
 @pytest.fixture()
-def auth_headers(client: TestClient):
-    response = client.post(
+async def auth_headers(client: AsyncClient):
+    response = await client.post(
         "/api/auth/login",
         data={"username": "test_admin", "password": "test_password_123"},
     )
