@@ -3,13 +3,15 @@ from typing import List, Optional
 import threading
 import time
 from collections import defaultdict, deque
+import os
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
 from app.core.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
+    AUTH_COOKIE_NAME,
     create_access_token,
     get_current_user,
     get_password_hash,
@@ -27,9 +29,26 @@ _LOGIN_ATTEMPTS = defaultdict(deque)
 _LOGIN_LOCK = threading.Lock()
 
 
-def _register_login_attempt(username: str) -> int:
+def _cookie_secure() -> bool:
+    value = (os.getenv("AUTH_COOKIE_SECURE") or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _cookie_samesite() -> str:
+    value = (os.getenv("AUTH_COOKIE_SAMESITE") or "lax").strip().lower()
+    return value if value in {"lax", "strict", "none"} else "lax"
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = (request.headers.get("x-forwarded-for") or "").strip()
+    if forwarded:
+        return forwarded.split(",")[0].strip() or "unknown"
+    return request.client.host if request.client else "unknown"
+
+
+def _register_login_attempt(username: str, client_ip: str) -> int:
     now = time.time()
-    key = (username or "").strip().lower()
+    key = f"{client_ip}:{(username or '').strip().lower()}"
     with _LOGIN_LOCK:
         attempts = _LOGIN_ATTEMPTS[key]
         while attempts and now - attempts[0] > _LOGIN_WINDOW_SECONDS:
@@ -38,8 +57,8 @@ def _register_login_attempt(username: str) -> int:
         return len(attempts)
 
 
-def _clear_login_attempts(username: str) -> None:
-    key = (username or "").strip().lower()
+def _clear_login_attempts(username: str, client_ip: str) -> None:
+    key = f"{client_ip}:{(username or '').strip().lower()}"
     with _LOGIN_LOCK:
         _LOGIN_ATTEMPTS.pop(key, None)
 
@@ -122,10 +141,13 @@ def delete_user(
 
 @router.post("/api/auth/login")
 def login(
+    request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_session),
 ):
-    attempt_count = _register_login_attempt(form_data.username)
+    client_ip = _client_ip(request) if request else "unknown"
+    attempt_count = _register_login_attempt(form_data.username, client_ip)
     if attempt_count > _LOGIN_MAX_ATTEMPTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -140,14 +162,30 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    _clear_login_attempts(form_data.username)
+    _clear_login_attempts(form_data.username, client_ip)
 
     access_token = create_access_token(
         data={"sub": str(user.id)},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
+    if response is not None:
+        response.set_cookie(
+            key=AUTH_COOKIE_NAME,
+            value=access_token,
+            httponly=True,
+            secure=_cookie_secure(),
+            samesite=_cookie_samesite(),
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            path="/",
+        )
 
     return {"access_token": access_token, "token_type": "bearer", "user": enrich_user_read(user)}
+
+
+@router.post("/api/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(key=AUTH_COOKIE_NAME, path="/")
+    return {"ok": True}
 
 
 @router.get("/api/auth/me", response_model=UserRead)

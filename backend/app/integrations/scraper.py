@@ -4,6 +4,9 @@ from typing import List, Optional, Dict
 import re
 from urllib.parse import urlparse, unquote
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Rate limiting: delay between API requests to avoid being blocked
 REQUEST_DELAY = 0.5  # seconds
@@ -58,7 +61,7 @@ def _fetch_fandom_api(domain: str, title: str, depth: int = 0, category_context:
             if 'query' in data and 'categorymembers' in data['query']:
                 members = data['query']['categorymembers']
                 if not members and depth == 0:
-                    print(f"API Info: Category {normalized_title} is empty.")
+                    logger.info("Fandom category is empty: %s", normalized_title)
                     
                 for member in members:
                     ns = member.get('ns')
@@ -70,8 +73,8 @@ def _fetch_fandom_api(domain: str, title: str, depth: int = 0, category_context:
                         sub_cat_name = m_title.replace('Category:', '').replace('_', ' ')
                         sub_items = _fetch_fandom_api(domain, m_title, depth + 1, category_context=sub_cat_name)
                         items.extend(sub_items)
-        except Exception as e:
-            print(f"API Error (Category {normalized_title}): {e}")
+        except Exception:
+            logger.exception("Fandom API category fetch failed: %s", normalized_title)
 
     # Case 2: Regular page - Use 'parse' but with 'redirects=1' equivalent (via query first if needed)
     if not items and depth == 0:
@@ -93,10 +96,10 @@ def _fetch_fandom_api(domain: str, title: str, depth: int = 0, category_context:
                 if page_id != "-1":
                     actual_title = pages[page_id]['title']
                 else:
-                    print(f"API Warning: Title {normalized_title} not found on {domain}")
+                    logger.warning("Fandom title not found: %s on %s", normalized_title, domain)
                     return []
-        except Exception as e:
-            print(f"API Redirect Error: {e}")
+        except Exception:
+            logger.exception("Fandom redirect resolution failed for %s", normalized_title)
 
         # Now parse the actual title
         parse_params = {
@@ -114,9 +117,9 @@ def _fetch_fandom_api(domain: str, title: str, depth: int = 0, category_context:
                 html_content = data['parse']['text']['*']
                 items = _parse_html_lists(html_content, default_category=actual_title.replace('_', ' '))
             else:
-                print(f"API Warning (Parse {actual_title}): No text content found.")
-        except Exception as e:
-            print(f"API Error (Parse {actual_title}): {e}")
+                logger.warning("Fandom parse returned empty content: %s", actual_title)
+        except Exception:
+            logger.exception("Fandom parse failed for %s", actual_title)
 
     return items
 
@@ -178,7 +181,7 @@ def parse_wiki_missions(url: str) -> List[Dict[str, str]]:
         if domain and title:
             items = _fetch_fandom_api(domain, title)
             if items:
-                print(f"Successfully fetched {len(items)} items via Fandom API.")
+                logger.info("Fetched %s items via Fandom API", len(items))
                 return _deduplicate(items)
 
     # Fallback
@@ -190,8 +193,8 @@ def parse_wiki_missions(url: str) -> List[Dict[str, str]]:
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         items = _parse_html_lists(response.text)
-    except Exception as e:
-        print(f"Error parsing wiki missions from {url}: {e}")
+    except Exception:
+        logger.exception("Error parsing wiki missions from %s", url)
 
     return _deduplicate(items)
 

@@ -78,6 +78,8 @@ agent/build/
 *.db
 *.sqlite
 *.sqlite3
+*.log
+*agent-startup.txt
 
 # Local docs
 PLAN.md

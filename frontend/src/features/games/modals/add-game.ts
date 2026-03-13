@@ -2,6 +2,15 @@ import { api } from '../../../shared/api';
 import { showNotification } from '../../../shared/ui';
 import { pickSteamPoster } from '../../../shared/lib/steam-images';
 
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 export function mountAddGameModal() {
     const root = document.getElementById('modal-root')!;
     
@@ -164,14 +173,17 @@ export function mountAddGameModal() {
                 const poster = pickSteamPoster(game);
                 const coverUrl = poster.src || game.cover_url || `https://cdn.akamai.steamstatic.com/steam/apps/${game.steam_app_id}/header.jpg`;
                 const coverFallback = poster.fallback || '';
+                const safeCoverUrl = escapeHtml(coverUrl);
+                const safeCoverFallback = escapeHtml(coverFallback);
+                const safeTitle = escapeHtml(game.title || 'Unknown Game');
 
                 el.innerHTML = `
                     <div class="flex items-center gap-4">
                         <div class="w-12 h-16 bg-slate-900 rounded flex items-center justify-center border border-slate-600/45 shrink-0 overflow-hidden">
-                            <img src="${coverUrl}" alt="${game.title}" class="w-full h-full object-cover" loading="lazy" onerror="if(!this.dataset.fallback && '${coverFallback}'){this.dataset.fallback='1';this.src='${coverFallback}';return;} this.style.display='none'; this.parentElement.innerHTML='<svg class=\\'w-6 h-6 text-slate-500\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></svg>'">
+                            <img src="${safeCoverUrl}" alt="${safeTitle}" class="w-full h-full object-cover" loading="lazy" onerror="if(!this.dataset.fallback && '${safeCoverFallback}'){this.dataset.fallback='1';this.src='${safeCoverFallback}';return;} this.style.display='none'; this.parentElement.innerHTML='<svg class=\\'w-6 h-6 text-slate-500\\' fill=\\'none\\' stroke=\\'currentColor\\' viewBox=\\'0 0 24 24\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\'></svg>'">
                         </div>
                         <div>
-                            <div class="font-medium text-white group-hover:text-cyan-200 transition-colors">${game.title}</div>
+                            <div class="font-medium text-white group-hover:text-cyan-200 transition-colors">${safeTitle}</div>
                             <div class="text-xs text-slate-400 mt-1">Как синхронизировать игру после добавления?</div>
                         </div>
                     </div>

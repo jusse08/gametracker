@@ -5,7 +5,7 @@ import { mountAddGameModal } from '../features/games/modals/add-game';
 import { mountSettingsModal } from '../features/settings/modal';
 import { mountAuthModal } from '../features/auth/modal';
 import { mountAdminModal } from '../features/admin/modal';
-import { ApiError, api } from '../shared/api';
+import { ApiError, api, hasAuthSessionHint } from '../shared/api';
 import { showConfirmDialog, showNotification } from '../shared/ui';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -56,7 +56,7 @@ function ensureAmbientBackground() {
 
 // Check if user is logged in
 export function isLoggedIn(): boolean {
-    return localStorage.getItem('auth_token') !== null;
+    return hasAuthSessionHint();
 }
 
 // Global error handler for API errors
@@ -64,7 +64,7 @@ window.addEventListener('error', (e) => {
     if (e.error instanceof ApiError) {
         if (e.error.status === 401) {
             // Unauthorized - show login modal
-            localStorage.removeItem('auth_token');
+            api.logout();
             mountAuthModal();
         } else {
             showNotification(e.error.message, 'error');
@@ -169,6 +169,13 @@ ensureAmbientBackground();
 if (!isLoggedIn()) {
     mountAuthModal();
 } else {
-    loadUserInfo();
-    router();
+    api.getMe()
+        .then(() => {
+            loadUserInfo();
+            router();
+        })
+        .catch(() => {
+            api.logout();
+            mountAuthModal();
+        });
 }

@@ -2,6 +2,15 @@ import { api, type Game } from '../../../shared/api';
 import { showNotification } from '../../../shared/ui';
 import { pickSteamPoster } from '../../../shared/lib/steam-images';
 
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function formatPlaytime(minutes: number): string {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
@@ -45,7 +54,7 @@ export async function renderLibrary(container: HTMLElement) {
                 <div class="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                     <div class="max-w-3xl gt-stack-md">
                         <span class="gt-chip inline-flex">Командный центр</span>
-                        <h1 class="text-3xl md:text-5xl font-bold leading-tight tracking-tight">Привет, ${username}!</h1>
+                        <h1 class="text-3xl md:text-5xl font-bold leading-tight tracking-tight">Привет, ${escapeHtml(username)}!</h1>
                         <p id="heroGameFact" class="text-slate-300/90 text-sm md:text-base max-w-2xl">Загружаем интересный факт об играх...</p>
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto" id="statsDock">
@@ -320,6 +329,10 @@ export async function renderLibrary(container: HTMLElement) {
             const poster = pickSteamPoster(game);
             const cover = poster.src || game.cover_url || 'https://via.placeholder.com/300x400/111827/6b7280?text=No+Cover';
             const coverFallback = poster.fallback || '';
+            const safeCover = escapeHtml(cover);
+            const safeCoverFallback = escapeHtml(coverFallback);
+            const safeTitle = escapeHtml(game.title);
+            const safeGenres = escapeHtml((game.genres || []).slice(0, 2).join(' • ') || 'Жанры не заданы');
             const progressPercent = profileProgressByGameId.get(game.id) ?? 0;
 
             const card = document.createElement('a');
@@ -362,13 +375,13 @@ export async function renderLibrary(container: HTMLElement) {
                 document.querySelectorAll('.status-tab').forEach((b) => b.classList.remove('drop-target'));
             });
 
-            card.innerHTML = `
+                card.innerHTML = `
                 <div class="aspect-[3/4] relative overflow-hidden pointer-events-none">
-                    <img src="${cover}" alt="${game.title}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" onerror="if(!this.dataset.fallback && '${coverFallback}'){this.dataset.fallback='1';this.src='${coverFallback}';}">
+                    <img src="${safeCover}" alt="${safeTitle}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" onerror="if(!this.dataset.fallback && '${safeCoverFallback}'){this.dataset.fallback='1';this.src='${safeCoverFallback}';}">
                     <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/30 to-transparent"></div>
                     <div class="absolute top-2 left-2 gt-badge gt-badge-info">${statusLabel(game.status)}</div>
                     <div class="absolute bottom-0 left-0 right-0 p-3">
-                        <h3 class="font-bold text-white leading-tight line-clamp-2">${game.title}</h3>
+                        <h3 class="font-bold text-white leading-tight line-clamp-2">${safeTitle}</h3>
                     </div>
                 </div>
                 <div class="p-3 -mt-px flex-grow flex flex-col gap-3 pointer-events-none">
@@ -380,7 +393,7 @@ export async function renderLibrary(container: HTMLElement) {
                         <div class="gt-progress-fill" style="width:${progressPercent}%"></div>
                     </div>
                     <p class="text-[11px] uppercase tracking-wider text-slate-400">Прогресс профиля: ${progressPercent}%</p>
-                    <p class="text-[11px] text-slate-400 line-clamp-2">${(game.genres || []).slice(0, 2).join(' • ') || 'Жанры не заданы'}</p>
+                    <p class="text-[11px] text-slate-400 line-clamp-2">${safeGenres}</p>
                 </div>
             `;
 
@@ -511,6 +524,33 @@ export async function renderLibrary(container: HTMLElement) {
             closeGenreMenu();
         }
     }, { signal: listenersAbort.signal });
+
+    const liveRefreshIntervalMs = 15000;
+    let liveRefreshInFlight = false;
+    const runLiveRefresh = async () => {
+        if (liveRefreshInFlight) return;
+        if (window.location.hash !== '#library') return;
+        liveRefreshInFlight = true;
+        try {
+            await loadGames();
+        } finally {
+            liveRefreshInFlight = false;
+        }
+    };
+    const liveTimer = window.setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        void runLiveRefresh();
+    }, liveRefreshIntervalMs);
+    listenersAbort.signal.addEventListener('abort', () => {
+        window.clearInterval(liveTimer);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+    }, { once: true });
+    const onVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+            void runLiveRefresh();
+        }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     window.addEventListener('hashchange', () => listenersAbort.abort(), { once: true });
 

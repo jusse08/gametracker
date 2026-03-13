@@ -1,6 +1,9 @@
 import requests
 import re
 from typing import List, Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 def build_steam_store_image_urls(app_id: int) -> Dict[str, str]:
     base = f"https://cdn.akamai.steamstatic.com/steam/apps/{app_id}"
@@ -47,8 +50,8 @@ def resolve_steam_id(profile_url: str, api_key: Optional[str] = None) -> Optiona
             data = res.json()
             if data.get("response", {}).get("success") == 1:
                 return data["response"]["steamid"]
-        except Exception as e:
-            print(f"Error resolving vanity URL: {e}")
+        except Exception:
+            logger.exception("Failed to resolve Steam vanity URL")
             
     return None
 
@@ -105,8 +108,8 @@ def sync_steam_achievements(app_id: int, steam_api_key: Optional[str], steam_use
                 ach["description"] = schema_ach.get("description", ach["description"])
 
         return achievements_data
-    except Exception as e:
-        print(f"Steam achievements sync error: {e}")
+    except Exception:
+        logger.exception("Steam achievements sync error")
         return []
 
 def fetch_steam_playtime(app_id: int, steam_api_key: Optional[str], steam_user_id: Optional[str]) -> int:
@@ -127,8 +130,8 @@ def fetch_steam_playtime(app_id: int, steam_api_key: Optional[str], steam_user_i
         games = data.get("response", {}).get("games", [])
         if games:
             return games[0].get("playtime_forever", 0)
-    except Exception as e:
-        print(f"Steam playtime fetch error: {e}")
+    except Exception:
+        logger.exception("Steam playtime fetch error")
         
     return 0
 
@@ -153,8 +156,8 @@ def fetch_steam_genres(app_id: int) -> List[str]:
         # Keep order and deduplicate.
         unique_names = list(dict.fromkeys([name for name in names if name]))
         return unique_names
-    except Exception as e:
-        print(f"Steam genres fetch error: {e}")
+    except Exception:
+        logger.exception("Steam genres fetch error")
         return []
 
 def search_steam_games(query: str) -> List[Dict[str, Any]]:
@@ -177,6 +180,6 @@ def search_steam_games(query: str) -> List[Dict[str, Any]]:
                     "sync_type": "steam"
                 })
         return results
-    except Exception as e:
-        print(f"Steam search error: {e}")
+    except Exception:
+        logger.exception("Steam search error")
         return []

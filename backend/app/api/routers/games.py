@@ -43,6 +43,7 @@ from app.services.common import (
     ensure_owned_checklist_item_with_detail,
     ensure_owned_game,
     ensure_owned_note_with_detail,
+    get_total_playtime_map,
     get_agent_config_by_game_id,
     validate_game_status,
     validate_sync_type,
@@ -120,7 +121,8 @@ def read_games(
         query = query.where(Game.status == status)
 
     games = session.exec(query).all()
-    return [build_game_read(session, game) for game in games]
+    playtime_map = get_total_playtime_map(session, [game.id for game in games if game.id is not None])
+    return [build_game_read(session, game, playtime_map=playtime_map) for game in games]
 
 
 @router.get("/api/games/{game_id}", response_model=GameRead)
@@ -570,9 +572,7 @@ def sync_steam_manual_playtime(
         raise HTTPException(status_code=400, detail="Ручной Steam-синк доступен только для steam-игр")
 
     if not game.steam_app_id:
-        game.steam_app_id = 400
-        session.add(game)
-        session.commit()
+        raise HTTPException(status_code=400, detail="У игры не задан steam_app_id")
 
     added_minutes = _sync_steam_playtime_manual(
         session,
@@ -597,9 +597,7 @@ def sync_steam_achievements_only(
         raise HTTPException(status_code=400, detail="Синхронизация достижений Steam доступна только для steam-игр")
 
     if not game.steam_app_id:
-        game.steam_app_id = 400
-        session.add(game)
-        session.commit()
+        raise HTTPException(status_code=400, detail="У игры не задан steam_app_id")
 
     new_db_items = _sync_steam_achievements_for_game(
         session,

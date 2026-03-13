@@ -77,6 +77,23 @@ export interface AgentConfigResponse {
     updated_at: string;
 }
 
+export interface AgentPairCodeResponse {
+    ok: boolean;
+    pair_code: string;
+    expires_in: number;
+    expires_at: string;
+}
+
+export interface AgentDevice {
+    id: number;
+    device_id: string;
+    device_name: string;
+    refresh_expires_at: string;
+    last_seen_at?: string;
+    created_at: string;
+    revoked_at?: string;
+}
+
 export interface Settings {
     steam_api_key?: string;
     steam_profile_url?: string;
@@ -90,6 +107,7 @@ export interface GameFact {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000/api';
+const AUTH_STATE_KEY = 'auth_session';
 
 // Custom error class for API errors
 export class ApiError extends Error {
@@ -115,30 +133,40 @@ async function handleResponse<T>(res: Response): Promise<T> {
     return res.json();
 }
 
-// Get auth token from localStorage
-function getAuthToken(): string | null {
-    return localStorage.getItem('auth_token');
+function setAuthState(value: boolean) {
+    if (value) {
+        localStorage.setItem(AUTH_STATE_KEY, '1');
+    } else {
+        localStorage.removeItem(AUTH_STATE_KEY);
+    }
+}
+
+export function hasAuthSessionHint(): boolean {
+    return localStorage.getItem(AUTH_STATE_KEY) === '1';
 }
 
 function getAuthHeaders(): HeadersInit {
-    const token = getAuthToken();
-    if (!token) {
-        return {};
-    }
-    return { 'Authorization': `Bearer ${token}` };
+    return {};
+}
+
+async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+    return fetch(input, {
+        ...init,
+        credentials: 'include',
+    });
 }
 
 export const api = {
     // --- AUTH ---
     async getUsers(): Promise<User[]> {
-        const res = await fetch(`${API_BASE}/users`, {
+        const res = await apiFetch(`${API_BASE}/users`, {
             headers: getAuthHeaders()
         });
         return handleResponse<User[]>(res);
     },
 
     async adminCreateUser(username: string, password: string): Promise<User> {
-        const res = await fetch(`${API_BASE}/users`, {
+        const res = await apiFetch(`${API_BASE}/users`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -147,7 +175,7 @@ export const api = {
     },
 
     async adminUpdateUserPassword(userId: number, password: string): Promise<{ ok: boolean }> {
-        const res = await fetch(`${API_BASE}/users/${userId}/password`, {
+        const res = await apiFetch(`${API_BASE}/users/${userId}/password`, {
             method: 'PUT',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ password })
@@ -156,7 +184,7 @@ export const api = {
     },
 
     async adminDeleteUser(userId: number): Promise<{ ok: boolean }> {
-        const res = await fetch(`${API_BASE}/users/${userId}`, {
+        const res = await apiFetch(`${API_BASE}/users/${userId}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -168,23 +196,22 @@ export const api = {
         formData.append('username', username);
         formData.append('password', password);
 
-        const res = await fetch(`${API_BASE}/auth/login`, {
+        const res = await apiFetch(`${API_BASE}/auth/login`, {
             method: 'POST',
             body: formData
         });
         const data = await handleResponse<{ access_token: string, token_type: string, user: User }>(res);
-        if (data.access_token) {
-            localStorage.setItem('auth_token', data.access_token);
-        }
+        setAuthState(true);
         return data;
     },
 
     logout() {
-        localStorage.removeItem('auth_token');
+        setAuthState(false);
+        void apiFetch(`${API_BASE}/auth/logout`, { method: 'POST' });
     },
 
     async getMe(): Promise<User> {
-        const res = await fetch(`${API_BASE}/auth/me`, {
+        const res = await apiFetch(`${API_BASE}/auth/me`, {
             headers: getAuthHeaders()
         });
         return handleResponse<User>(res);
@@ -192,12 +219,12 @@ export const api = {
 
     // --- SETTINGS ---
     async getSettings(): Promise<Settings> {
-        const res = await fetch(`${API_BASE}/settings`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_BASE}/settings`, { headers: getAuthHeaders() });
         return handleResponse<Settings>(res);
     },
 
     async updateSettings(settings: Partial<Settings>): Promise<Settings> {
-        const res = await fetch(`${API_BASE}/settings`, {
+        const res = await apiFetch(`${API_BASE}/settings`, {
             method: 'PUT',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(settings)
@@ -208,22 +235,22 @@ export const api = {
     // --- GAMES ---
     async getGames(status?: string): Promise<Game[]> {
         const url = status ? `${API_BASE}/games?status=${status}` : `${API_BASE}/games`;
-        const res = await fetch(url, { headers: getAuthHeaders() });
+        const res = await apiFetch(url, { headers: getAuthHeaders() });
         return handleResponse<Game[]>(res);
     },
 
     async getRandomGameFact(): Promise<GameFact> {
-        const res = await fetch(`${API_BASE}/facts/random`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_BASE}/facts/random`, { headers: getAuthHeaders() });
         return handleResponse<GameFact>(res);
     },
 
     async getGame(id: number): Promise<Game> {
-        const res = await fetch(`${API_BASE}/games/${id}`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_BASE}/games/${id}`, { headers: getAuthHeaders() });
         return handleResponse<Game>(res);
     },
 
     async createGame(game: Partial<Game>): Promise<Game> {
-        const res = await fetch(`${API_BASE}/games`, {
+        const res = await apiFetch(`${API_BASE}/games`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(game)
@@ -232,7 +259,7 @@ export const api = {
     },
 
     async updateGame(id: number, game: Partial<Game>): Promise<Game> {
-        const res = await fetch(`${API_BASE}/games/${id}`, {
+        const res = await apiFetch(`${API_BASE}/games/${id}`, {
             method: 'PUT',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(game)
@@ -241,7 +268,7 @@ export const api = {
     },
 
     async deleteGame(id: number): Promise<{ ok: boolean }> {
-        const res = await fetch(`${API_BASE}/games/${id}`, {
+        const res = await apiFetch(`${API_BASE}/games/${id}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -249,18 +276,18 @@ export const api = {
     },
 
     async searchSteam(query: string): Promise<Partial<Game>[]> {
-        const res = await fetch(`${API_BASE}/games/search/steam?query=${encodeURIComponent(query)}`);
+        const res = await apiFetch(`${API_BASE}/games/search/steam?query=${encodeURIComponent(query)}`);
         return handleResponse<Partial<Game>[]>(res);
     },
 
     // --- CHECKLIST ---
     async getChecklist(gameId: number): Promise<ChecklistItem[]> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/checklist`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/checklist`, { headers: getAuthHeaders() });
         return handleResponse<ChecklistItem[]>(res);
     },
 
     async createChecklistItem(gameId: number, item: Partial<ChecklistItem>): Promise<ChecklistItem> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/checklist`, {
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/checklist`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(item)
@@ -269,12 +296,12 @@ export const api = {
     },
 
     async getChecklistCategories(gameId: number): Promise<QuestCategory[]> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/checklist/categories`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/checklist/categories`, { headers: getAuthHeaders() });
         return handleResponse<QuestCategory[]>(res);
     },
 
     async createChecklistCategory(gameId: number, name: string): Promise<QuestCategory> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/checklist/categories`, {
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/checklist/categories`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ name })
@@ -283,7 +310,7 @@ export const api = {
     },
 
     async renameChecklistCategory(gameId: number, oldName: string, newName: string): Promise<{ ok: boolean; category: string; updated_items: number }> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/checklist/categories/${encodeURIComponent(oldName)}`, {
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/checklist/categories/${encodeURIComponent(oldName)}`, {
             method: 'PUT',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ new_name: newName })
@@ -292,7 +319,7 @@ export const api = {
     },
 
     async completeChecklistItem(itemId: number, completed: boolean): Promise<ChecklistItem> {
-        const res = await fetch(`${API_BASE}/checklist/${itemId}?completed=${completed}`, {
+        const res = await apiFetch(`${API_BASE}/checklist/${itemId}?completed=${completed}`, {
             method: 'PUT',
             headers: getAuthHeaders()
         });
@@ -300,7 +327,7 @@ export const api = {
     },
 
     async deleteChecklistItem(itemId: number): Promise<{ ok: boolean }> {
-        const res = await fetch(`${API_BASE}/checklist/${itemId}`, {
+        const res = await apiFetch(`${API_BASE}/checklist/${itemId}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -308,7 +335,7 @@ export const api = {
     },
 
     async deleteChecklistCategory(gameId: number, category: string): Promise<{ ok: boolean }> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/checklist/category/${encodeURIComponent(category)}`, {
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/checklist/category/${encodeURIComponent(category)}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -317,12 +344,12 @@ export const api = {
 
     // --- NOTES ---
     async getNotes(gameId: number): Promise<Note[]> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/notes`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/notes`, { headers: getAuthHeaders() });
         return handleResponse<Note[]>(res);
     },
 
     async createNote(gameId: number, item: Partial<Note>): Promise<Note> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/notes`, {
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/notes`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(item)
@@ -331,7 +358,7 @@ export const api = {
     },
 
     async updateNote(noteId: number, text: string): Promise<Note> {
-        const res = await fetch(`${API_BASE}/notes/${noteId}?text=${encodeURIComponent(text)}`, {
+        const res = await apiFetch(`${API_BASE}/notes/${noteId}?text=${encodeURIComponent(text)}`, {
             method: 'PUT',
             headers: getAuthHeaders()
         });
@@ -339,7 +366,7 @@ export const api = {
     },
 
     async deleteNote(noteId: number): Promise<{ ok: boolean }> {
-        const res = await fetch(`${API_BASE}/notes/${noteId}`, {
+        const res = await apiFetch(`${API_BASE}/notes/${noteId}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -348,7 +375,7 @@ export const api = {
 
     // --- ACHIEVEMENTS & WIKI ---
     async importWikiChecklist(gameId: number, url: string): Promise<ChecklistItem[]> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/import/wiki`, {
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/import/wiki`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ url })
@@ -357,12 +384,12 @@ export const api = {
     },
 
     async getAchievements(gameId: number): Promise<Achievement[]> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/achievements`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/achievements`, { headers: getAuthHeaders() });
         return handleResponse<Achievement[]>(res);
     },
 
     async syncSteamAchievements(gameId: number): Promise<Achievement[]> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/sync/steam/achievements`, {
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/sync/steam/achievements`, {
             method: 'POST',
             headers: getAuthHeaders()
         });
@@ -370,7 +397,7 @@ export const api = {
     },
 
     async syncSteamManual(gameId: number): Promise<{ ok: boolean; added_minutes: number }> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/sync/steam/manual`, {
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/sync/steam/manual`, {
             method: 'POST',
             headers: getAuthHeaders()
         });
@@ -378,13 +405,13 @@ export const api = {
     },
 
     async getSessions(gameId: number): Promise<GameSession[]> {
-        const res = await fetch(`${API_BASE}/games/${gameId}/sessions`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_BASE}/games/${gameId}/sessions`, { headers: getAuthHeaders() });
         return handleResponse<GameSession[]>(res);
     },
 
     // --- AGENT ---
     async downloadAgent(): Promise<Blob> {
-        const res = await fetch(`${API_BASE}/agent/download`);
+        const res = await apiFetch(`${API_BASE}/agent/download`);
         if (!res.ok) {
             const errorData = await res.json().catch(() => ({}));
             throw new ApiError(res.status, errorData.detail || 'Failed to download agent');
@@ -393,12 +420,12 @@ export const api = {
     },
 
     async getAgentGames(): Promise<Game[]> {
-        const res = await fetch(`${API_BASE}/agent/games`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_BASE}/agent/games`, { headers: getAuthHeaders() });
         return handleResponse<Game[]>(res);
     },
 
     async configureAgent(game_id: number, launch_path: string, enabled: boolean = true): Promise<AgentConfigResponse> {
-        const res = await fetch(`${API_BASE}/agent/configure`, {
+        const res = await apiFetch(`${API_BASE}/agent/configure`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ game_id, launch_path, enabled })
@@ -407,7 +434,7 @@ export const api = {
     },
 
     async deleteAgentConfig(gameId: number): Promise<{ ok: boolean }> {
-        const res = await fetch(`${API_BASE}/agent/config/${gameId}`, {
+        const res = await apiFetch(`${API_BASE}/agent/config/${gameId}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -415,7 +442,7 @@ export const api = {
     },
 
     async testAgentPing(gameId: number): Promise<{ ok: boolean, message: string, exe_name: string, status: string, duration_minutes?: number }> {
-        const res = await fetch(`${API_BASE}/agent/test-ping`, {
+        const res = await apiFetch(`${API_BASE}/agent/test-ping`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ game_id: gameId })
@@ -424,7 +451,7 @@ export const api = {
     },
 
     async requestAgentLaunch(gameId: number): Promise<{ ok: boolean, message: string, request_id: string }> {
-        const res = await fetch(`${API_BASE}/agent/launch`, {
+        const res = await apiFetch(`${API_BASE}/agent/launch`, {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ game_id: gameId })
@@ -432,17 +459,27 @@ export const api = {
         return handleResponse<{ ok: boolean, message: string, request_id: string }>(res);
     },
 
-    async getAgentToken(): Promise<{ ok: boolean, agent_token: string }> {
-        const res = await fetch(`${API_BASE}/agent/token`, { headers: getAuthHeaders() });
-        return handleResponse<{ ok: boolean, agent_token: string }>(res);
-    },
-
-    async rotateAgentToken(): Promise<{ ok: boolean, agent_token: string }> {
-        const res = await fetch(`${API_BASE}/agent/token/rotate`, {
+    async createAgentPairCode(): Promise<AgentPairCodeResponse> {
+        const res = await apiFetch(`${API_BASE}/agent/pair-code`, {
             method: 'POST',
             headers: getAuthHeaders()
         });
-        return handleResponse<{ ok: boolean, agent_token: string }>(res);
-    }
+        return handleResponse<AgentPairCodeResponse>(res);
+    },
+
+    async getAgentDevices(): Promise<AgentDevice[]> {
+        const res = await apiFetch(`${API_BASE}/agent/devices`, {
+            headers: getAuthHeaders()
+        });
+        return handleResponse<AgentDevice[]>(res);
+    },
+
+    async revokeAgentDevice(deviceId: string): Promise<{ ok: boolean }> {
+        const res = await apiFetch(`${API_BASE}/agent/devices/${encodeURIComponent(deviceId)}/revoke`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        return handleResponse<{ ok: boolean }>(res);
+    },
 };
 

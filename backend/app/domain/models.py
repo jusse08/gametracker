@@ -8,7 +8,6 @@ class UserBase(SQLModel):
     steam_api_key: Optional[str] = None
     steam_profile_url: Optional[str] = None
     steam_user_id: Optional[str] = None
-    agent_token: Optional[str] = Field(default=None, index=True, unique=True)
     agent_last_seen_at: Optional[datetime] = None
 
 class User(UserBase, table=True):
@@ -17,10 +16,11 @@ class User(UserBase, table=True):
     hashed_password: str
 
     games: List["Game"] = Relationship(back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    agent_devices: List["AgentDevice"] = Relationship(back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
 class UserCreate(SQLModel):
-    username: str
-    password: str
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=6, max_length=255)
 
 class UserPasswordUpdate(SQLModel):
     password: str = Field(min_length=6, max_length=255)
@@ -194,6 +194,45 @@ class AgentConfigRead(SQLModel):
     launch_path: Optional[str]
     enabled: bool
     updated_at: datetime
+
+
+class AgentPairCode(SQLModel, table=True):
+    __tablename__ = "agent_pair_codes"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    code_hash: str = Field(index=True, unique=True)
+    expires_at: datetime = Field(index=True)
+    consumed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AgentDeviceBase(SQLModel):
+    user_id: int = Field(foreign_key="users.id", index=True)
+    device_id: str = Field(index=True, unique=True, min_length=12, max_length=128)
+    device_name: str = Field(min_length=1, max_length=120)
+    refresh_token_hash: str = Field(index=True)
+    refresh_expires_at: datetime
+    last_seen_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    revoked_at: Optional[datetime] = None
+
+
+class AgentDevice(AgentDeviceBase, table=True):
+    __tablename__ = "agent_devices"
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    user: User = Relationship(back_populates="agent_devices")
+
+
+class AgentDeviceRead(SQLModel):
+    id: int
+    device_id: str
+    device_name: str
+    refresh_expires_at: datetime
+    last_seen_at: Optional[datetime] = None
+    created_at: datetime
+    revoked_at: Optional[datetime] = None
 
 class DashboardWidgetBase(SQLModel):
     widget_type: str

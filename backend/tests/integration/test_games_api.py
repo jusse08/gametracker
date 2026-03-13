@@ -5,6 +5,14 @@ def test_healthcheck(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"ok": True}
+    assert response.headers.get("x-content-type-options") == "nosniff"
+    assert response.headers.get("x-frame-options") == "DENY"
+
+
+def test_readiness_check(client):
+    response = client.get("/ready")
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
 
 
 def test_create_game_and_import_wiki_items(client, auth_headers, monkeypatch):

@@ -32,6 +32,17 @@ class AgentNoteUpdateRequest(BaseModel):
     text: str
 
 
+class AgentPairRequest(BaseModel):
+    pair_code: str
+    device_id: str
+    device_name: str
+
+
+class AgentRefreshRequest(BaseModel):
+    device_id: str
+    refresh_token: str
+
+
 class GameFactResponse(BaseModel):
     text: str
     game_title: str

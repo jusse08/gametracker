@@ -21,7 +21,6 @@ def test_configure_agent_rejects_dangerous_launch_paths(client: TestClient, auth
         "\\\\evil-host\\share\\game.exe",
         "https://example.com/game.exe",
         "relative\\game.exe",
-        "C:/Games/game.exe",
         "C:\\Games\\game.ps1",
     ]
 
@@ -45,3 +44,83 @@ def test_configure_agent_accepts_absolute_windows_exe_path(client: TestClient, a
     assert res.status_code == 200, res.text
     data = res.json()
     assert data["exe_name"].lower() == "game.exe"
+
+
+def test_configure_agent_accepts_windows_path_with_forward_slashes(client: TestClient, auth_headers: dict):
+    game_id = _create_non_steam_game(client, auth_headers)
+
+    res = client.post(
+        "/api/agent/configure",
+        headers=auth_headers,
+        json={"game_id": game_id, "launch_path": "C:/Games/CoolGame/game.exe", "enabled": True},
+    )
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["launch_path"] == r"C:\Games\CoolGame\game.exe"
+
+
+def test_configure_agent_rejects_duplicate_launch_path(client: TestClient, auth_headers: dict):
+    first_game_id = _create_non_steam_game(client, auth_headers)
+    second_game_id = _create_non_steam_game(client, auth_headers)
+
+    first = client.post(
+        "/api/agent/configure",
+        headers=auth_headers,
+        json={"game_id": first_game_id, "launch_path": r"C:\Games\Shared\game.exe", "enabled": True},
+    )
+    assert first.status_code == 200, first.text
+
+    duplicate = client.post(
+        "/api/agent/configure",
+        headers=auth_headers,
+        json={"game_id": second_game_id, "launch_path": r"C:\Games\Shared\game.exe", "enabled": True},
+    )
+    assert duplicate.status_code == 409, duplicate.text
+
+
+def test_agent_pair_refresh_and_revoke_flow(client: TestClient, auth_headers: dict):
+    pair_code_response = client.post("/api/agent/pair-code", headers=auth_headers)
+    assert pair_code_response.status_code == 200, pair_code_response.text
+    pair_code = pair_code_response.json()["pair_code"]
+
+    device_id = "gt-test-device-000001"
+    pair_response = client.post(
+        "/api/agent/pair",
+        json={
+            "pair_code": pair_code,
+            "device_id": device_id,
+            "device_name": "Test Agent Device",
+        },
+    )
+    assert pair_response.status_code == 200, pair_response.text
+    payload = pair_response.json()
+    access_token = payload["access_token"]
+    refresh_token = payload["refresh_token"]
+
+    config_response = client.get(
+        "/api/agent/config",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert config_response.status_code == 200, config_response.text
+
+    refresh_response = client.post(
+        "/api/agent/auth/refresh",
+        json={"device_id": device_id, "refresh_token": refresh_token},
+    )
+    assert refresh_response.status_code == 200, refresh_response.text
+    refreshed = refresh_response.json()
+    assert refreshed["device_id"] == device_id
+    assert refreshed["refresh_token"] != refresh_token
+
+    list_devices = client.get("/api/agent/devices", headers=auth_headers)
+    assert list_devices.status_code == 200, list_devices.text
+    assert any(item["device_id"] == device_id for item in list_devices.json())
+
+    revoke_response = client.post(f"/api/agent/devices/{device_id}/revoke", headers=auth_headers)
+    assert revoke_response.status_code == 200, revoke_response.text
+
+    refresh_after_revoke = client.post(
+        "/api/agent/auth/refresh",
+        json={"device_id": device_id, "refresh_token": refreshed["refresh_token"]},
+    )
+    assert refresh_after_revoke.status_code == 401, refresh_after_revoke.text

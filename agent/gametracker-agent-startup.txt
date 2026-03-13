@@ -1,4 +1,0 @@
-started_at=2026-03-12T22:29:25.602489
-pid=16708
-exe=C:\Users\Nick\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\python.exe
-argv=['agent.py']

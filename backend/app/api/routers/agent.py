@@ -1,24 +1,42 @@
 import os
+import ntpath
 import secrets
 import re
 import threading
 import asyncio
+import hashlib
 from datetime import datetime, timedelta
 from uuid import uuid4
 from typing import Any, Dict, List, Optional, Set
 
+import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, WebSocketException, status
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
-from app.core.auth import get_current_user
+from app.core.auth import ALGORITHM, SECRET_KEY, create_access_token, get_current_user
 from app.core.database import get_session, engine
-from app.domain.models import AgentConfig, AgentConfigRead, Game, GameRead, Note, NoteCreate, NoteRead, Session as DbSession, User
+from app.domain.models import (
+    AgentConfig,
+    AgentConfigRead,
+    AgentDevice,
+    AgentDeviceRead,
+    AgentPairCode,
+    Game,
+    GameRead,
+    Note,
+    NoteCreate,
+    NoteRead,
+    Session as DbSession,
+    User,
+)
 from app.domain.schemas import (
     AgentConfigRequest,
     AgentLaunchAckRequest,
     AgentLaunchRequest,
     AgentNoteUpdateRequest,
+    AgentPairRequest,
+    AgentRefreshRequest,
     AgentTestPingRequest,
     PingRequest,
 )
@@ -26,14 +44,19 @@ from app.services.common import (
     build_game_read,
     ensure_owned_game_with_detail,
     ensure_owned_note_with_detail,
+    get_total_playtime_map,
     get_agent_config_by_game_id,
     upsert_agent_session,
 )
 
 router = APIRouter()
-AGENT_HEARTBEAT_TIMEOUT_SECONDS = 120
-AGENT_LIVE_HEARTBEAT_TIMEOUT_SECONDS = 6
-WINDOWS_ABS_PATH_RE = re.compile(r"^[A-Za-z]:\\")
+AGENT_HEARTBEAT_TIMEOUT_SECONDS = 30
+AGENT_LIVE_HEARTBEAT_TIMEOUT_SECONDS = 20
+AGENT_PAIR_CODE_TTL_SECONDS = 600
+AGENT_ACCESS_TOKEN_TTL_MINUTES = 15
+AGENT_REFRESH_TOKEN_TTL_DAYS = 30
+AGENT_SESSION_GAP_SECONDS = 30
+WINDOWS_ABS_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 
 class AgentWsManager:
@@ -94,6 +117,95 @@ class AgentWsManager:
 WS_MANAGER = AgentWsManager()
 
 
+def _hash_value(raw: str) -> str:
+    payload = f"{SECRET_KEY}:{raw}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _extract_bearer_token(authorization: str) -> str:
+    auth = (authorization or "").strip()
+    if not auth.lower().startswith("bearer "):
+        return ""
+    return auth[7:].strip()
+
+
+def _validate_device_id(raw: str) -> str:
+    device_id = (raw or "").strip()
+    if not device_id or len(device_id) < 12 or len(device_id) > 128:
+        raise HTTPException(status_code=400, detail="Invalid device_id")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", device_id):
+        raise HTTPException(status_code=400, detail="Invalid device_id format")
+    return device_id
+
+
+def _validate_device_name(raw: str) -> str:
+    name = (raw or "").strip()
+    if not name or len(name) > 120:
+        raise HTTPException(status_code=400, detail="Invalid device_name")
+    return name
+
+
+def _issue_agent_tokens(user_id: int, device_id: str) -> Dict[str, Any]:
+    access_ttl = timedelta(minutes=AGENT_ACCESS_TOKEN_TTL_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user_id), "agent": True, "device_id": device_id},
+        expires_delta=access_ttl,
+    )
+    refresh_token = secrets.token_urlsafe(48)
+    refresh_hash = _hash_value(refresh_token)
+    refresh_expires_at = datetime.utcnow() + timedelta(days=AGENT_REFRESH_TOKEN_TTL_DAYS)
+    return {
+        "access_token": access_token,
+        "access_expires_in": int(access_ttl.total_seconds()),
+        "refresh_token": refresh_token,
+        "refresh_hash": refresh_hash,
+        "refresh_expires_at": refresh_expires_at,
+    }
+
+
+def _get_agent_user_by_access_token(session: Session, token: str) -> User:
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing access token")
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid access token")
+
+    if payload.get("agent") is not True:
+        raise HTTPException(status_code=401, detail="Token is not agent token")
+
+    user_id_str = payload.get("sub")
+    device_id = (payload.get("device_id") or "").strip()
+    if not user_id_str or not device_id:
+        raise HTTPException(status_code=401, detail="Invalid access token payload")
+
+    try:
+        user_id = int(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid access token payload")
+
+    device = session.exec(
+        select(AgentDevice).where(
+            AgentDevice.device_id == device_id,
+            AgentDevice.user_id == user_id,
+        )
+    ).first()
+    if not device or device.revoked_at or device.refresh_expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Agent device is revoked or expired")
+
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    now = datetime.utcnow()
+    device.last_seen_at = now
+    session.add(device)
+    session.commit()
+    _touch_agent_heartbeat(session, user)
+    return user
+
+
 def _touch_agent_heartbeat(session: Session, agent_user: User) -> None:
     now = datetime.utcnow()
     if (
@@ -106,24 +218,20 @@ def _touch_agent_heartbeat(session: Session, agent_user: User) -> None:
 
 
 def _get_agent_user_by_token(session: Session, token: str) -> User:
-    x_agent_token = (token or "").strip()
-    if not x_agent_token:
+    raw_token = (token or "").strip()
+    if not raw_token:
         raise HTTPException(status_code=401, detail="Missing agent token")
-
-    agent_user = session.exec(select(User).where(User.agent_token == x_agent_token)).first()
-    if not agent_user:
-        raise HTTPException(status_code=401, detail="Invalid agent token")
-
-    _touch_agent_heartbeat(session, agent_user)
-    return agent_user
+    return _get_agent_user_by_access_token(session, raw_token)
 
 
 def get_agent_user(
     *,
     session: Session = Depends(get_session),
-    x_agent_token: Optional[str] = Header(default=None, alias="X-Agent-Token"),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
 ) -> User:
-    return _get_agent_user_by_token(session, x_agent_token or "")
+    bearer_token = _extract_bearer_token(authorization or "")
+    token = bearer_token
+    return _get_agent_user_by_token(session, token)
 
 
 def normalize_and_validate_launch_path(launch_path: str) -> str:
@@ -138,14 +246,14 @@ def normalize_and_validate_launch_path(launch_path: str) -> str:
         raise HTTPException(status_code=400, detail="URL launch paths are not allowed")
     if not WINDOWS_ABS_PATH_RE.match(normalized):
         raise HTTPException(status_code=400, detail="launch_path must be an absolute Windows path")
+    normalized = normalized.replace("/", "\\")
     if not normalized.lower().endswith(".exe"):
         raise HTTPException(status_code=400, detail="launch_path must point to .exe")
     return normalized
 
 
 def extract_exe_name(launch_path: str) -> str:
-    normalized = launch_path.replace("\\", "/")
-    exe_name = os.path.basename(normalized)
+    exe_name = ntpath.basename(launch_path)
     if not exe_name:
         raise HTTPException(status_code=400, detail="Не удалось определить exe из launch_path")
     if not exe_name.lower().endswith(".exe"):
@@ -177,47 +285,176 @@ def build_agent_config_items(session: Session, user_id: int) -> List[Dict[str, A
     return items
 
 
-@router.get("/api/agent/token")
-def get_agent_token(
+@router.post("/api/agent/pair-code")
+def create_agent_pair_code(
     *,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.agent_token:
-        current_user.agent_token = secrets.token_urlsafe(32)
-        session.add(current_user)
-        session.commit()
-        session.refresh(current_user)
+    now = datetime.utcnow()
+    active_codes = session.exec(
+        select(AgentPairCode).where(
+            AgentPairCode.user_id == current_user.id,
+            AgentPairCode.consumed_at == None,
+            AgentPairCode.expires_at > now,
+        )
+    ).all()
+    for row in active_codes:
+        session.delete(row)
 
-    return {"ok": True, "agent_token": current_user.agent_token}
-
-
-@router.post("/api/agent/token/rotate")
-def rotate_agent_token(
-    *,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    current_user.agent_token = secrets.token_urlsafe(32)
-    session.add(current_user)
+    code = f"{secrets.randbelow(900000) + 100000}"
+    session.add(
+        AgentPairCode(
+            user_id=current_user.id,
+            code_hash=_hash_value(code),
+            expires_at=now + timedelta(seconds=AGENT_PAIR_CODE_TTL_SECONDS),
+        )
+    )
     session.commit()
-    session.refresh(current_user)
+    return {
+        "ok": True,
+        "pair_code": code,
+        "expires_in": AGENT_PAIR_CODE_TTL_SECONDS,
+        "expires_at": (now + timedelta(seconds=AGENT_PAIR_CODE_TTL_SECONDS)).isoformat(),
+    }
+
+
+@router.post("/api/agent/pair")
+def pair_agent_device(
+    *,
+    session: Session = Depends(get_session),
+    req: AgentPairRequest,
+):
+    now = datetime.utcnow()
+    pair_hash = _hash_value((req.pair_code or "").strip())
+    pair_row = session.exec(
+        select(AgentPairCode).where(
+            AgentPairCode.code_hash == pair_hash,
+            AgentPairCode.consumed_at == None,
+            AgentPairCode.expires_at > now,
+        )
+    ).first()
+    if not pair_row:
+        raise HTTPException(status_code=401, detail="Invalid or expired pair code")
+
+    device_id = _validate_device_id(req.device_id)
+    device_name = _validate_device_name(req.device_name)
+    tokens = _issue_agent_tokens(pair_row.user_id, device_id)
+
+    device = session.exec(select(AgentDevice).where(AgentDevice.device_id == device_id)).first()
+    if device and device.user_id != pair_row.user_id:
+        raise HTTPException(status_code=409, detail="Device already bound to another account")
+
+    if not device:
+        device = AgentDevice(
+            user_id=pair_row.user_id,
+            device_id=device_id,
+            device_name=device_name,
+            refresh_token_hash=tokens["refresh_hash"],
+            refresh_expires_at=tokens["refresh_expires_at"],
+            last_seen_at=now,
+        )
+    else:
+        device.device_name = device_name
+        device.refresh_token_hash = tokens["refresh_hash"]
+        device.refresh_expires_at = tokens["refresh_expires_at"]
+        device.last_seen_at = now
+        device.revoked_at = None
+
+    pair_row.consumed_at = now
+    session.add(device)
+    session.add(pair_row)
+    session.commit()
+
+    return {
+        "ok": True,
+        "token_type": "bearer",
+        "access_token": tokens["access_token"],
+        "access_expires_in": tokens["access_expires_in"],
+        "refresh_token": tokens["refresh_token"],
+        "refresh_expires_at": tokens["refresh_expires_at"].isoformat(),
+        "device_id": device_id,
+        "device_name": device_name,
+    }
+
+
+@router.post("/api/agent/auth/refresh")
+def refresh_agent_access_token(
+    *,
+    session: Session = Depends(get_session),
+    req: AgentRefreshRequest,
+):
+    now = datetime.utcnow()
+    device_id = _validate_device_id(req.device_id)
+    refresh_hash = _hash_value((req.refresh_token or "").strip())
+    device = session.exec(
+        select(AgentDevice).where(
+            AgentDevice.device_id == device_id,
+            AgentDevice.refresh_token_hash == refresh_hash,
+        )
+    ).first()
+    if not device or device.revoked_at or device.refresh_expires_at < now:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+    tokens = _issue_agent_tokens(device.user_id, device.device_id)
+    device.refresh_token_hash = tokens["refresh_hash"]
+    device.refresh_expires_at = tokens["refresh_expires_at"]
+    device.last_seen_at = now
+    session.add(device)
+    session.commit()
+
+    user = session.get(User, device.user_id)
+    if user:
+        _touch_agent_heartbeat(session, user)
+
+    return {
+        "ok": True,
+        "token_type": "bearer",
+        "access_token": tokens["access_token"],
+        "access_expires_in": tokens["access_expires_in"],
+        "refresh_token": tokens["refresh_token"],
+        "refresh_expires_at": tokens["refresh_expires_at"].isoformat(),
+        "device_id": device.device_id,
+        "device_name": device.device_name,
+    }
+
+
+@router.get("/api/agent/devices", response_model=List[AgentDeviceRead])
+def list_agent_devices(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    rows = session.exec(
+        select(AgentDevice)
+        .where(AgentDevice.user_id == current_user.id)
+        .order_by(AgentDevice.created_at.desc())
+    ).all()
+    return rows
+
+
+@router.post("/api/agent/devices/{device_id}/revoke")
+def revoke_agent_device(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    device_id: str,
+):
+    normalized = _validate_device_id(device_id)
+    row = session.exec(
+        select(AgentDevice).where(
+            AgentDevice.user_id == current_user.id,
+            AgentDevice.device_id == normalized,
+        )
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    row.revoked_at = datetime.utcnow()
+    session.add(row)
+    session.commit()
     WS_MANAGER.disconnect_all(current_user.id)
-    return {"ok": True, "agent_token": current_user.agent_token}
-
-
-@router.post("/api/agent/token/rotate/self")
-def rotate_agent_token_self(
-    *,
-    session: Session = Depends(get_session),
-    agent_user: User = Depends(get_agent_user),
-):
-    agent_user.agent_token = secrets.token_urlsafe(32)
-    session.add(agent_user)
-    session.commit()
-    session.refresh(agent_user)
-    WS_MANAGER.disconnect_all(agent_user.id)
-    return {"ok": True, "agent_token": agent_user.agent_token}
+    return {"ok": True}
 
 
 @router.get("/api/agent/config")
@@ -374,17 +611,22 @@ def delete_note_for_agent(
 @router.get("/api/agent/download")
 def download_agent():
     base_dir = os.path.dirname(__file__)
-    candidates = [
-        os.path.abspath(os.path.join(base_dir, "..", "data", "agent", "GameTrackerAgent.exe")),
-        os.path.abspath(os.path.join(base_dir, "..", "..", "agent", "dist", "GameTrackerAgent.exe")),
-        os.path.abspath(os.path.join(base_dir, "..", "agent", "dist", "GameTrackerAgent.exe")),
-    ]
-    agent_path = next((path for path in candidates if os.path.exists(path)), None)
+    agent_path = os.path.abspath(
+        os.path.join(
+            base_dir,
+            "..",
+            "..",
+            "..",
+            "data",
+            "agent",
+            "GameTrackerAgent.exe",
+        )
+    )
 
-    if not agent_path:
+    if not os.path.exists(agent_path):
         raise HTTPException(
             status_code=404,
-            detail="Агент не найден. Убедитесь, что сервис agent-builder в docker-compose успешно собрал GameTrackerAgent.exe.",
+            detail="Агент не найден. Ожидаемый путь: /app/data/agent/GameTrackerAgent.exe",
         )
 
     return FileResponse(
@@ -495,6 +737,7 @@ def ping_session(
         now=now,
         active_source="agent",
         new_source="agent",
+        max_gap_seconds=AGENT_SESSION_GAP_SECONDS,
     )
     session.commit()
     return {"ok": True}
@@ -508,7 +751,8 @@ def get_agent_games(
 ):
     query = select(Game).where(Game.user_id == current_user.id, Game.sync_type == "non_steam")
     games = session.exec(query).all()
-    return [build_game_read(session, game) for game in games]
+    playtime_map = get_total_playtime_map(session, [game.id for game in games if game.id is not None])
+    return [build_game_read(session, game, playtime_map=playtime_map) for game in games]
 
 
 @router.post("/api/agent/configure", response_model=AgentConfigRead)
@@ -525,6 +769,21 @@ def configure_agent(
     exe_name = extract_exe_name(launch_path)
 
     game = ensure_owned_game_with_detail(session, current_user, game_id, "Игра не найдена")
+
+    duplicate = session.exec(
+        select(AgentConfig)
+        .join(Game, AgentConfig.game_id == Game.id)
+        .where(
+            Game.user_id == current_user.id,
+            AgentConfig.game_id != game_id,
+            AgentConfig.launch_path == launch_path,
+        )
+    ).first()
+    if duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail="Этот путь уже используется у другой игры. Укажите уникальный launch_path.",
+        )
 
     game.exe_name = exe_name
     game.launch_path = launch_path

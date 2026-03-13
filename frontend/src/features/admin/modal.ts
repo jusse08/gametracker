@@ -1,6 +1,15 @@
 import { api } from '../../shared/api';
 import { showConfirmDialog, showInputDialog, showNotification } from '../../shared/ui';
 
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 export async function mountAdminModal() {
     const root = document.getElementById('modal-root')!;
 
@@ -106,6 +115,7 @@ export async function mountAdminModal() {
 
             users.forEach(u => {
                 const tr = document.createElement('tr');
+                const safeUsername = escapeHtml(u.username);
                 
                 const roleBadge = u.is_superadmin 
                     ? '<span class="gt-badge gt-badge-warning">Superadmin</span>'
@@ -123,7 +133,7 @@ export async function mountAdminModal() {
 
                 tr.innerHTML = `
                     <td class="px-4 py-3 text-gray-500">#${u.id}</td>
-                    <td class="px-4 py-3 text-gray-100">${u.username}</td>
+                    <td class="px-4 py-3 text-gray-100">${safeUsername}</td>
                     <td class="px-4 py-3">${roleBadge}</td>
                     <td class="px-4 py-3">${actionCell}</td>
                 `;

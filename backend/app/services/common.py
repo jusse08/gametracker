@@ -1,7 +1,8 @@
 from datetime import datetime
-from typing import Optional
+from typing import Dict, Optional, Sequence
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.domain.models import (
@@ -82,9 +83,25 @@ def get_total_playtime_minutes(session: Session, game_id: int) -> int:
     return sum(session.exec(playtime_query) or [0])
 
 
-def build_game_read(session: Session, game: Game) -> GameRead:
+def get_total_playtime_map(session: Session, game_ids: Sequence[int]) -> Dict[int, int]:
+    ids = [gid for gid in game_ids if gid is not None]
+    if not ids:
+        return {}
+
+    rows = session.exec(
+        select(DbSession.game_id, func.coalesce(func.sum(DbSession.duration_minutes), 0))
+        .where(DbSession.game_id.in_(ids))
+        .group_by(DbSession.game_id)
+    ).all()
+    return {int(game_id): int(total or 0) for game_id, total in rows}
+
+
+def build_game_read(session: Session, game: Game, playtime_map: Optional[Dict[int, int]] = None) -> GameRead:
     game_read = GameRead.model_validate(game)
-    game_read.total_playtime_minutes = get_total_playtime_minutes(session, game.id)
+    if playtime_map is not None and game.id in playtime_map:
+        game_read.total_playtime_minutes = playtime_map[game.id]
+    else:
+        game_read.total_playtime_minutes = get_total_playtime_minutes(session, game.id)
     return game_read
 
 
@@ -110,6 +127,7 @@ def upsert_agent_session(
     now: datetime,
     active_source: str,
     new_source: str,
+    max_gap_seconds: int = 300,
 ):
     query = (
         select(DbSession)
@@ -130,9 +148,9 @@ def upsert_agent_session(
         return new_session, "new_session"
 
     last_ended_at = active_session_obj.ended_at or active_session_obj.started_at
-    diff_minutes = (now - last_ended_at).total_seconds() / 60.0
+    diff_seconds = (now - last_ended_at).total_seconds()
 
-    if diff_minutes > 5:
+    if diff_seconds > max(int(max_gap_seconds or 0), 1):
         new_session = DbSession(
             game_id=game_id,
             started_at=now,

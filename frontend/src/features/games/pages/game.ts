@@ -2,6 +2,8 @@ import { api, type QuestCategory } from '../../../shared/api';
 import { showConfirmDialog, showInputDialog, showNotification } from '../../../shared/ui';
 import { pickSteamHero, pickSteamPoster } from '../../../shared/lib/steam-images';
 
+let stopGameLiveRefresh: (() => void) | null = null;
+
 function escapeHtml(value: string): string {
     return value
         .replace(/&/g, '&amp;')
@@ -9,6 +11,14 @@ function escapeHtml(value: string): string {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function normalizeLaunchPathForCompare(path: string): string {
+    return (path || '')
+        .trim()
+        .replace(/^"+|"+$/g, '')
+        .replace(/\//g, '\\')
+        .toLowerCase();
 }
 
 function statusLabel(status: string): string {
@@ -318,6 +328,21 @@ async function openAgentSettingsModal(
         btn.textContent = 'Сохранение...';
         btn.disabled = true;
         try {
+            const allGames = await api.getGames();
+            const normalizedInputPath = normalizeLaunchPathForCompare(launchPath);
+            const duplicateGame = allGames.find((item) => {
+                if (item.id === gameId || !item.launch_path) return false;
+                return normalizeLaunchPathForCompare(item.launch_path) === normalizedInputPath;
+            });
+            if (duplicateGame) {
+                showNotification(
+                    `Этот путь уже используется в игре "${duplicateGame.title}". Укажите уникальный путь.`,
+                    'error'
+                );
+                input.focus();
+                return;
+            }
+
             await api.configureAgent(gameId, launchPath, true);
             showNotification('Настройки агента сохранены.', 'success');
             closeModal();
@@ -355,6 +380,11 @@ async function openAgentSettingsModal(
 }
 
 export async function renderGamePage(container: HTMLElement, gameId: number) {
+    if (stopGameLiveRefresh) {
+        stopGameLiveRefresh();
+        stopGameLiveRefresh = null;
+    }
+
     container.innerHTML = `
         <div class="flex items-center justify-center min-h-[50vh]">
             <div class="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
@@ -369,6 +399,11 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
         const coverFallback = poster.fallback || '';
         const heroCover = heroImage.src || cover;
         const heroFallback = heroImage.fallback || coverFallback;
+        const safeTitle = escapeHtml(game.title);
+        const safeCover = escapeHtml(cover);
+        const safeCoverFallback = escapeHtml(coverFallback);
+        const safeHeroCover = escapeHtml(heroCover);
+        const safeHeroFallback = escapeHtml(heroFallback);
         const syncTypeLabel = game.sync_type === 'steam' ? 'Steam' : 'Non-Steam';
         const syncTypeBadgeClass = game.sync_type === 'steam'
             ? 'gt-badge gt-badge-info'
@@ -399,7 +434,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             <div class="relative w-full h-64 md:h-80 lg:h-96 rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10">
                 <!-- Blurred background image -->
                 <div class="absolute inset-0 z-0">
-                    <img src="${heroCover}" class="w-full h-full object-cover opacity-30 blur-xl scale-110 object-top" onerror="if(!this.dataset.fallback && '${heroFallback}'){this.dataset.fallback='1';this.src='${heroFallback}';}" />
+                    <img src="${safeHeroCover}" class="w-full h-full object-cover opacity-30 blur-xl scale-110 object-top" onerror="if(!this.dataset.fallback && '${safeHeroFallback}'){this.dataset.fallback='1';this.src='${safeHeroFallback}';}" />
                 </div>
                 <!-- Gradient overlay -->
                 <div class="absolute inset-0 z-10 bg-gradient-to-t from-gray-900 via-gray-900/80 to-transparent"></div>
@@ -408,7 +443,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                     <div class="flex flex-col md:flex-row items-start md:items-center gap-6 w-full">
                         <!-- Cover Image shadow-drop -->
                         <div class="w-32 md:w-48 lg:w-56 aspect-[3/4] rounded-xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] ring-1 ring-white/20 shrink-0 md:self-center">
-                            <img src="${cover}" alt="${game.title}" class="w-full h-full object-cover" onerror="if(!this.dataset.fallback && '${coverFallback}'){this.dataset.fallback='1';this.src='${coverFallback}';}" />
+                            <img src="${safeCover}" alt="${safeTitle}" class="w-full h-full object-cover" onerror="if(!this.dataset.fallback && '${safeCoverFallback}'){this.dataset.fallback='1';this.src='${safeCoverFallback}';}" />
                         </div>
                         
                         <div class="flex-grow w-full">
@@ -426,7 +461,7 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
                                         </span>
                                         <span class="${syncTypeBadgeClass}">${syncTypeLabel}</span>
                                     </div>
-                                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 tracking-tight drop-shadow-lg">${game.title}</h1>
+                                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 tracking-tight drop-shadow-lg">${safeTitle}</h1>
                                     <div class="flex flex-wrap items-center gap-2 mt-2">
                                         ${(game.genres || []).map((genre) => `<span class="text-[10px] px-2 py-1 rounded-full bg-gray-900/70 border border-gray-700 text-gray-300">${escapeHtml(genre)}</span>`).join('')}
                                         ${(game.genres || []).length === 0 ? '<span class="text-[11px] text-gray-400">Жанры не найдены</span>' : ''}
@@ -634,6 +669,43 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
             if (mobileEl) mobileEl.innerText = `${playtimeHours} ч.`;
             await loadHistory(gameId);
         };
+
+        const gameHash = `#game/${gameId}`;
+        const liveRefreshIntervalMs = 10000;
+        let refreshInFlight = false;
+        const runLiveRefresh = async () => {
+            if (refreshInFlight) return;
+            if (window.location.hash !== gameHash) return;
+            refreshInFlight = true;
+            try {
+                await refreshPlaytimeAndHistory();
+            } catch {
+                // Silent refresh should not distract the user with periodic toasts.
+            } finally {
+                refreshInFlight = false;
+            }
+        };
+        const liveTimer = window.setInterval(() => {
+            if (document.visibilityState !== 'visible') return;
+            void runLiveRefresh();
+        }, liveRefreshIntervalMs);
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                void runLiveRefresh();
+            }
+        };
+        const cleanupLiveRefresh = () => {
+            window.clearInterval(liveTimer);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            stopGameLiveRefresh = null;
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        window.addEventListener('hashchange', () => {
+            if (window.location.hash !== gameHash) {
+                cleanupLiveRefresh();
+            }
+        }, { once: true });
+        stopGameLiveRefresh = cleanupLiveRefresh;
 
         document.getElementById('syncSteamManualBtn')?.addEventListener('click', async (e) => {
             const btn = e.currentTarget as HTMLButtonElement;
@@ -959,11 +1031,12 @@ async function loadNotes(gameId: number) {
 
     notes.forEach(note => {
         const date = new Date(note.created_at).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const safeText = escapeHtml(note.text);
         const el = document.createElement('div');
         el.className = "bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-sm relative group gt-stack-sm";
         el.innerHTML = `
             <div class="text-xs text-blue-400/70 font-medium">${date}</div>
-            <div class="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">${note.text}</div>
+            <div class="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">${safeText}</div>
             <button data-id="${note.id}" class="delete-note-btn gt-icon-btn gt-icon-btn-danger absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
             </button>
@@ -1027,14 +1100,16 @@ async function loadAchievements(gameId: number) {
     achievements.forEach(ach => {
         const el = document.createElement('div');
         const completedOpacity = ach.completed ? 'opacity-100 border-yellow-500/50' : 'opacity-40 grayscale border-gray-700/50';
+        const safeIconUrl = escapeHtml(ach.icon_url || '');
+        const safeAchievementName = escapeHtml(ach.name);
         el.className = `bg-gray-900/80 overflow-hidden flex flex-col items-center p-3 rounded-xl border transition-all ${completedOpacity}`;
         
         el.innerHTML = `
             <div class="w-12 h-12 rounded-lg bg-black mb-2 flex items-center justify-center overflow-hidden border border-gray-800 shrink-0">
-                ${ach.icon_url ? `<img src="${ach.icon_url}" class="w-full h-full object-cover">` : `<svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>`}
+                ${ach.icon_url ? `<img src="${safeIconUrl}" class="w-full h-full object-cover">` : `<svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>`}
             </div>
             <div class="text-center w-full">
-                <div class="text-[11px] font-bold text-gray-300 leading-tight mb-0.5 line-clamp-2" title="${ach.name}">${ach.name}</div>
+                <div class="text-[11px] font-bold text-gray-300 leading-tight mb-0.5 line-clamp-2" title="${safeAchievementName}">${safeAchievementName}</div>
                 ${ach.completed ? '<div class="text-[9px] text-yellow-500 uppercase tracking-widest font-bold">Получено</div>' : ''}
             </div>
         `;
@@ -1088,6 +1163,7 @@ async function loadHistory(gameId: number) {
         const time = new Date(session.started_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         const isSteamManual = session.source === 'steam_manual_sync' || session.source === 'steam_sync';
         const isAgent = session.source === 'agent';
+        const safeSessionSource = escapeHtml(session.source);
         
         const el = document.createElement('div');
         el.className = "flex items-center justify-between p-3 bg-gray-900/60 rounded-xl border border-gray-800 hover:border-gray-700 transition-colors group";
@@ -1104,13 +1180,13 @@ async function loadHistory(gameId: number) {
                 <div>
                     <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">${date} <span class="text-gray-600 ml-1 opacity-50 font-normal lowercase">${time}</span></div>
                     <div class="text-xs text-gray-200 font-medium">
-                        ${isSteamManual ? 'Синхронизация Steam' : (isAgent ? 'Сессия через агент' : `Сессия (${session.source})`)}
+                        ${isSteamManual ? 'Синхронизация Steam' : (isAgent ? 'Сессия через агент' : `Сессия (${safeSessionSource})`)}
                     </div>
                 </div>
             </div>
             <div class="text-right">
                 <div class="text-[10px] text-gray-500 font-bold mb-1">+${session.duration_minutes} мин.</div>
-                <div class="gt-badge ${isSteamManual ? 'gt-badge-info' : 'gt-badge-success'}">${isAgent ? 'агент' : (isSteamManual ? 'ручной sync' : session.source)}</div>
+                <div class="gt-badge ${isSteamManual ? 'gt-badge-info' : 'gt-badge-success'}">${isAgent ? 'агент' : (isSteamManual ? 'ручной sync' : safeSessionSource)}</div>
             </div>
         `;
         container.appendChild(el);

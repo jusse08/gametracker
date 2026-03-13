@@ -1,4 +1,0 @@
-started_at=2026-03-12T22:32:05.884409
-pid=86279
-exe=/usr/bin/python3
-argv=['/mnt/d/repos/gametracker/agent/agent.py']

@@ -26,7 +26,19 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from sqlmodel import SQLModel
-from app.domain.models import Game, Note, ChecklistItem, Achievement, Session, AgentConfig, DashboardWidget, Settings
+from app.domain.models import (
+    Achievement,
+    AgentConfig,
+    AgentDevice,
+    AgentPairCode,
+    ChecklistItem,
+    DashboardWidget,
+    Game,
+    Note,
+    Session,
+    Settings,
+    User,
+)
 
 target_metadata = SQLModel.metadata
 
