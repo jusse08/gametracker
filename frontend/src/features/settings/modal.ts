@@ -17,6 +17,35 @@ function formatDate(value?: string): string {
     return dt.toLocaleString('ru-RU');
 }
 
+async function copyText(value: string): Promise<void> {
+    if (navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(value);
+            return;
+        } catch {
+            // Fall back when Clipboard API is blocked outside a secure context.
+        }
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', 'true');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-1000px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+
+    if (!copied) {
+        throw new Error('Copy failed');
+    }
+}
+
 export async function mountSettingsModal() {
     const root = document.getElementById('modal-root')!;
     const settings = await api.getSettings();
@@ -283,7 +312,7 @@ export async function mountSettingsModal() {
             return;
         }
         try {
-            await navigator.clipboard.writeText(currentPairCode);
+            await copyText(currentPairCode);
             showNotification('Код скопирован', 'success');
         } catch {
             showNotification('Не удалось скопировать код', 'error');
