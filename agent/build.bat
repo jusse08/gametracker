@@ -6,23 +6,34 @@ echo.
 cd /d "%~dp0"
 
 set "PYTHON_CMD="
+set "PYTHON_EXE="
 where py >nul 2>nul
-if %errorlevel%==0 set "PYTHON_CMD=py -3"
+if %errorlevel%==0 (
+  set "PYTHON_CMD=py -3"
+  set "PYTHON_EXE=py"
+)
 
 if not defined PYTHON_CMD (
   where python >nul 2>nul
-  if %errorlevel%==0 set "PYTHON_CMD=python"
+  if %errorlevel%==0 (
+    set "PYTHON_CMD=python"
+    set "PYTHON_EXE=python"
+  )
 )
 
 if not defined PYTHON_CMD (
   where python3 >nul 2>nul
-  if %errorlevel%==0 set "PYTHON_CMD=python3"
+  if %errorlevel%==0 (
+    set "PYTHON_CMD=python3"
+    set "PYTHON_EXE=python3"
+  )
 )
 
 if not defined PYTHON_CMD (
   for /f "delims=" %%P in ('dir /b /ad "%LocalAppData%\Programs\Python\Python*" 2^>nul') do (
     if exist "%LocalAppData%\Programs\Python\%%P\python.exe" (
-      set "PYTHON_CMD=%LocalAppData%\Programs\Python\%%P\python.exe"
+      set "PYTHON_EXE=%LocalAppData%\Programs\Python\%%P\python.exe"
+      set "PYTHON_CMD=""%LocalAppData%\Programs\Python\%%P\python.exe"""
       goto :python_found
     )
   )
@@ -31,7 +42,8 @@ if not defined PYTHON_CMD (
 if not defined PYTHON_CMD (
   for /f "delims=" %%P in ('dir /b /ad "%ProgramFiles%\Python*" 2^>nul') do (
     if exist "%ProgramFiles%\%%P\python.exe" (
-      set "PYTHON_CMD=%ProgramFiles%\%%P\python.exe"
+      set "PYTHON_EXE=%ProgramFiles%\%%P\python.exe"
+      set "PYTHON_CMD=""%ProgramFiles%\%%P\python.exe"""
       goto :python_found
     )
   )
@@ -40,7 +52,8 @@ if not defined PYTHON_CMD (
 if not defined PYTHON_CMD (
   for /f "delims=" %%P in ('dir /b /ad "%ProgramFiles(x86)%\Python*" 2^>nul') do (
     if exist "%ProgramFiles(x86)%\%%P\python.exe" (
-      set "PYTHON_CMD=%ProgramFiles(x86)%\%%P\python.exe"
+      set "PYTHON_EXE=%ProgramFiles(x86)%\%%P\python.exe"
+      set "PYTHON_CMD=""%ProgramFiles(x86)%\%%P\python.exe"""
       goto :python_found
     )
   )
@@ -106,7 +119,7 @@ if not errorlevel 1 (
 
 REM Build with PyInstaller from venv
 echo Building executable...
-call .venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --onefile --noconsole --name GameTrackerAgent agent.py
+call .venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --onefile --noconsole --name GameTrackerAgent --hidden-import=time_utils agent.py
 
 if errorlevel 1 (
   echo Build failed.

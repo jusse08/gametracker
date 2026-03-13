@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from sqlalchemy import inspect
+from sqlalchemy import text
 from sqlmodel import Session, create_engine, select
 
 from alembic import command
@@ -72,3 +73,27 @@ def test_bootstrap_runtime_state_initializes_runtime_records(monkeypatch, tmp_pa
         assert session.get(Settings, 1) is not None
         usernames = session.exec(select(User.username)).all()
         assert "runtime_admin" in usernames
+
+
+def test_alembic_upgrade_recovers_from_existing_schema_with_empty_version(monkeypatch, tmp_path):
+    database_path = tmp_path / "existing-schema.sqlite3"
+    database_url = f"sqlite:///{database_path}"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+
+    command.upgrade(_alembic_config(database_url), "head")
+    engine = _sqlite_engine(database_path)
+
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM alembic_version"))
+
+    command.upgrade(_alembic_config(database_url), "head")
+
+    with engine.begin() as connection:
+        revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+
+    inspector = inspect(engine)
+
+    assert revision == "drop_legacy_agent_token"
+    assert "agent_pair_codes" in inspector.get_table_names()
+    quest_indexes = {index["name"] for index in inspector.get_indexes("quest_categories")}
+    assert "uq_quest_categories_game_id_name" in quest_indexes

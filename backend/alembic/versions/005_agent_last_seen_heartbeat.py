@@ -18,9 +18,17 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _has_column(table_name: str, column_name: str) -> bool:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = inspector.get_columns(table_name)
+    return any(column["name"] == column_name for column in columns)
+
+
 def upgrade() -> None:
     with op.batch_alter_table("users", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("agent_last_seen_at", sa.DateTime(), nullable=True))
+        if not _has_column("users", "agent_last_seen_at"):
+            batch_op.add_column(sa.Column("agent_last_seen_at", sa.DateTime(), nullable=True))
 
 
 def downgrade() -> None:
