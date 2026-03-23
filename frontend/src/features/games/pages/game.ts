@@ -672,8 +672,8 @@ export async function renderGamePage(container: HTMLElement, gameId: number) {
         };
 
         const gameHash = `#game/${gameId}`;
-        const liveRefreshIntervalMs = 10000;
-        const visibilityRefreshMinGapMs = 5000;
+        const liveRefreshIntervalMs = 30000;
+        const visibilityRefreshMinGapMs = 10000;
         let lastRefreshCompletedAt = Date.now();
         let refreshInFlight = false;
         const runLiveRefresh = async () => {

@@ -533,8 +533,8 @@ export async function renderLibrary(container: HTMLElement) {
         renderLibraryState();
     }) as EventListener, { signal: listenersAbort.signal });
 
-    const liveRefreshIntervalMs = 15000;
-    const visibilityRefreshMinGapMs = 5000;
+    const liveRefreshIntervalMs = 30000;
+    const visibilityRefreshMinGapMs = 10000;
     let liveRefreshInFlight = false;
     const runLiveRefresh = async () => {
         if (liveRefreshInFlight) return;
