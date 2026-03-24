@@ -206,7 +206,7 @@ export async function mountAdminModal() {
                 });
             });
         } catch (e: any) {
-            tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-8 text-center text-red-400 text-sm">Ошибка: ${e.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-8 text-center text-red-400 text-sm">Ошибка: ${escapeHtml(e.message || 'Неизвестная ошибка')}</td></tr>`;
         }
     };
 

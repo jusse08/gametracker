@@ -4,6 +4,7 @@ websockets==15.0.1
 sqlmodel==0.0.33
 python-dotenv==1.2.2
 requests==2.32.5
+httpx==0.28.1
 beautifulsoup4==4.14.3
 alembic==1.18.4
 bcrypt==5.0.0

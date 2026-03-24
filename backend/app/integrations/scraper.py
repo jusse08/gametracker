@@ -4,7 +4,7 @@ import time
 from typing import Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
-import requests
+import httpx
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,9 @@ def _fetch_fandom_api(
     normalized_title = title.replace(" ", "_")
 
     if normalized_title.startswith("Category:"):
-        current_cat = category_context or normalized_title.replace("Category:", "").replace("_", " ")
+        current_cat = category_context or normalized_title.replace("Category:", "").replace(
+            "_", " "
+        )
         params = {
             "action": "query",
             "list": "categorymembers",
@@ -62,10 +64,11 @@ def _fetch_fandom_api(
             "origin": "*",
         }
         try:
-            response = requests.get(api_url, params=params, headers=headers, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-        except (requests.RequestException, ValueError):
+            with httpx.Client(timeout=10.0, headers=headers) as client:
+                response = client.get(api_url, params=params)
+                response.raise_for_status()
+                data = response.json()
+        except (httpx.HTTPError, ValueError):
             logger.exception("Fandom API category fetch failed: %s", normalized_title)
         else:
             members = data.get("query", {}).get("categorymembers", [])
@@ -100,10 +103,11 @@ def _fetch_fandom_api(
         }
         actual_title = normalized_title
         try:
-            response = requests.get(api_url, params=resolve_params, headers=headers, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-        except (requests.RequestException, ValueError):
+            with httpx.Client(timeout=10.0, headers=headers) as client:
+                response = client.get(api_url, params=resolve_params)
+                response.raise_for_status()
+                data = response.json()
+        except (httpx.HTTPError, ValueError):
             logger.exception("Fandom redirect resolution failed for %s", normalized_title)
         else:
             pages = data.get("query", {}).get("pages", {})
@@ -123,15 +127,18 @@ def _fetch_fandom_api(
             "origin": "*",
         }
         try:
-            response = requests.get(api_url, params=parse_params, headers=headers, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-        except (requests.RequestException, ValueError):
+            with httpx.Client(timeout=10.0, headers=headers) as client:
+                response = client.get(api_url, params=parse_params)
+                response.raise_for_status()
+                data = response.json()
+        except (httpx.HTTPError, ValueError):
             logger.exception("Fandom parse failed for %s", actual_title)
         else:
             html_content = data.get("parse", {}).get("text", {}).get("*")
             if isinstance(html_content, str) and html_content:
-                items = _parse_html_lists(html_content, default_category=actual_title.replace("_", " "))
+                items = _parse_html_lists(
+                    html_content, default_category=actual_title.replace("_", " ")
+                )
             else:
                 logger.warning("Fandom parse returned empty content: %s", actual_title)
 
@@ -143,7 +150,9 @@ def _parse_html_lists(html: str, default_category: str = "General") -> List[Dict
     soup = BeautifulSoup(html, "html.parser")
     items = []
 
-    for junk in soup.find_all(["table", "div"], class_=["navbox", "toc", "sidebar", "client-js", "asst-ad"]):
+    for junk in soup.find_all(
+        ["table", "div"], class_=["navbox", "toc", "sidebar", "client-js", "asst-ad"]
+    ):
         junk.decompose()
 
     content_div = soup.find(id="mw-content-text") or soup
@@ -203,13 +212,15 @@ def parse_wiki_missions(url: str) -> List[Dict[str, str]]:
     }
 
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-    except requests.RequestException:
+        with httpx.Client(timeout=15.0, headers=headers) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            html_text = response.text
+    except httpx.HTTPError:
         logger.exception("Error fetching wiki missions from %s", url)
         return []
 
-    items = _parse_html_lists(response.text)
+    items = _parse_html_lists(html_text)
     return _deduplicate(items)
 
 

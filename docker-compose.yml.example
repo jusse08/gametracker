@@ -1,4 +1,16 @@
 services:
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "scripts/manage_db.py", "upgrade"]
+    volumes:
+      - ./gametracker_data:/app/data
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./data/database.db}
+    networks:
+      - gametracker-network
+
   backend:
     build:
       context: ./backend
@@ -20,6 +32,9 @@ services:
       SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-admin}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     networks:
       - gametracker-network
     ports:
@@ -48,7 +63,8 @@ services:
       timeout: 10s
       retries: 3
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - gametracker-network
 

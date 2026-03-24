@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-import requests
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +40,11 @@ def resolve_steam_id(profile_url: str, api_key: Optional[str] = None) -> Optiona
     url = "https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/"
     params = {"key": api_key, "vanityurl": vanity_match.group(1)}
     try:
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-    except (requests.RequestException, ValueError):
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
         logger.exception("Failed to resolve Steam vanity URL")
         return None
 
@@ -69,12 +70,13 @@ def sync_steam_achievements(
     }
 
     try:
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code == 403:
-            return []
-        response.raise_for_status()
-        data = response.json()
-    except (requests.RequestException, ValueError):
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(url, params=params)
+            if response.status_code == 403:
+                return []
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
         logger.exception("Steam achievements sync error")
         return []
 
@@ -100,18 +102,17 @@ def sync_steam_achievements(
     schema_url = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/"
     schema_params = {"key": steam_api_key, "appid": app_id}
     try:
-        schema_response = requests.get(schema_url, params=schema_params, timeout=10)
-        schema_response.raise_for_status()
-        schema_data = schema_response.json()
-    except (requests.RequestException, ValueError):
+        with httpx.Client(timeout=10.0) as client:
+            schema_response = client.get(schema_url, params=schema_params)
+            schema_response.raise_for_status()
+            schema_data = schema_response.json()
+    except (httpx.HTTPError, ValueError):
         logger.warning("Steam schema fetch failed for app_id=%s", app_id, exc_info=True)
         return achievements_data
 
     game_schema = schema_data.get("game", {}).get("availableGameStats", {}).get("achievements", [])
     schema_by_name = {
-        item["name"]: item
-        for item in game_schema
-        if isinstance(item, dict) and item.get("name")
+        item["name"]: item for item in game_schema if isinstance(item, dict) and item.get("name")
     }
 
     for achievement in achievements_data:
@@ -125,7 +126,9 @@ def sync_steam_achievements(
     return achievements_data
 
 
-def fetch_steam_playtime(app_id: int, steam_api_key: Optional[str], steam_user_id: Optional[str]) -> int:
+def fetch_steam_playtime(
+    app_id: int, steam_api_key: Optional[str], steam_user_id: Optional[str]
+) -> int:
     if not steam_api_key or not steam_user_id:
         return 0
 
@@ -138,10 +141,11 @@ def fetch_steam_playtime(app_id: int, steam_api_key: Optional[str], steam_user_i
     }
 
     try:
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-    except (requests.RequestException, ValueError):
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
         logger.exception("Steam playtime fetch error")
         return 0
 
@@ -159,10 +163,11 @@ def fetch_steam_genres(app_id: int) -> List[str]:
         "cc": "US",
     }
     try:
-        response = requests.get(details_url, params=params, timeout=10)
-        response.raise_for_status()
-        payload = response.json()
-    except (requests.RequestException, ValueError):
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(details_url, params=params)
+            response.raise_for_status()
+            payload = response.json()
+    except (httpx.HTTPError, ValueError):
         logger.exception("Steam genres fetch error")
         return []
 
@@ -178,10 +183,11 @@ def fetch_steam_genres(app_id: int) -> List[str]:
 def search_steam_games(query: str) -> List[Dict[str, Any]]:
     search_url = f"https://store.steampowered.com/api/storesearch/?term={query}&l=english&cc=US"
     try:
-        response = requests.get(search_url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-    except (requests.RequestException, ValueError):
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(search_url)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
         logger.exception("Steam search error")
         return []
 

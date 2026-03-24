@@ -3,7 +3,8 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError, ProgrammingError, SQLAlchemyError
 from sqlmodel import Session, select
@@ -16,6 +17,7 @@ from app.api.routers.users_auth import router as users_auth_router
 from app.core.auth import get_password_hash
 from app.core.database import engine
 from app.core.migrations import MIGRATION_COMMAND, ensure_database_schema_current
+from app.core.rate_limit import global_rate_limiter
 from app.domain.models import Settings, User
 
 load_dotenv()
@@ -46,6 +48,31 @@ def validate_runtime_security_config() -> None:
     superadmin_password = (os.getenv("SUPERADMIN_PASSWORD") or "").strip()
     if superadmin_password and superadmin_password in INSECURE_PLACEHOLDER_VALUES:
         raise RuntimeError("SUPERADMIN_PASSWORD must be replaced before startup")
+
+    # Validate ALLOWED_ORIGINS to prevent open CORS
+    allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "")
+    if allowed_origins_raw:
+        origins = [origin.strip() for origin in allowed_origins_raw.split(",") if origin.strip()]
+        for origin in origins:
+            if not (origin.startswith("http://") or origin.startswith("https://")):
+                raise RuntimeError(
+                    f"Invalid origin format: {origin}. Must start with http:// or https://"
+                )
+            if "*" in origin and origin != "*":
+                raise RuntimeError(f"Origin cannot contain wildcard: {origin}")
+            if origin == "*":
+                logger.warning(
+                    "ALLOWED_ORIGINS is set to '*'. This allows any domain to access the API."
+                )
+            # Basic URL validation
+            try:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(origin)
+                if not parsed.scheme or not parsed.netloc:
+                    raise RuntimeError(f"Invalid origin URL: {origin}")
+            except Exception as e:
+                raise RuntimeError(f"Invalid origin URL: {origin} - {e}")
 
 
 def bootstrap_runtime_state() -> None:
@@ -124,15 +151,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.middleware("http")
-async def set_security_headers(request, call_next):
-    response = await call_next(request)
+
+def apply_security_headers(response: Response) -> Response:
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     return response
+
+
+@app.middleware("http")
+async def rate_limit_and_security_headers(request, call_next):
+    # Apply rate limiting to API endpoints only
+    if request.url.path.startswith("/api/"):
+        try:
+            await global_rate_limiter(request)
+        except HTTPException as exc:
+            response = JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=exc.headers,
+            )
+            return apply_security_headers(response)
+
+    response = await call_next(request)
+    return apply_security_headers(response)
 
 
 app.include_router(users_auth_router)

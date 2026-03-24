@@ -66,7 +66,9 @@ def normalize_category_name(category_name: str) -> str:
     return normalized
 
 
-def ensure_quest_category_exists(session: Session, game_id: int, category_name: str) -> QuestCategory:
+def ensure_quest_category_exists(
+    session: Session, game_id: int, category_name: str
+) -> QuestCategory:
     normalized = normalize_category_name(category_name)
     existing = session.exec(
         select(QuestCategory).where(
@@ -121,14 +123,24 @@ def read_games(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
     status: Optional[str] = None,
+    limit: int = 1000,
+    offset: int = 0,
 ):
+    if limit < 1 or limit > 1000:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 1000")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="Offset must be non-negative")
+
     query = select(Game).where(Game.user_id == current_user.id)
     if status is not None:
         validate_game_status(status)
         query = query.where(Game.status == status)
 
+    query = query.offset(offset).limit(limit)
     games = session.exec(query).all()
-    playtime_map = get_total_playtime_map(session, [game.id for game in games if game.id is not None])
+    playtime_map = get_total_playtime_map(
+        session, [game.id for game in games if game.id is not None]
+    )
     return [build_game_read(session, game, playtime_map=playtime_map) for game in games]
 
 
@@ -212,9 +224,22 @@ def read_checklist_items(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
     game_id: int,
+    limit: int = 500,
+    offset: int = 0,
 ):
+    if limit < 1 or limit > 500:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 500")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="Offset must be non-negative")
+
     ensure_owned_game(session, current_user, game_id)
-    query = select(ChecklistItem).where(ChecklistItem.game_id == game_id).order_by(ChecklistItem.sort_order)
+    query = (
+        select(ChecklistItem)
+        .where(ChecklistItem.game_id == game_id)
+        .order_by(ChecklistItem.sort_order)
+        .offset(offset)
+        .limit(limit)
+    )
     return session.exec(query).all()
 
 
@@ -230,7 +255,9 @@ def create_checklist_item(
     category_name = normalize_category_name(item.category)
     ensure_quest_category_exists(session, game_id, category_name)
 
-    db_item = ChecklistItem.model_validate(item, update={"game_id": game_id, "category": category_name})
+    db_item = ChecklistItem.model_validate(
+        item, update={"game_id": game_id, "category": category_name}
+    )
     session.add(db_item)
     session.commit()
     session.refresh(db_item)
@@ -247,7 +274,9 @@ def read_checklist_categories(
     ensure_owned_game(session, current_user, game_id)
 
     categories = session.exec(
-        select(QuestCategory).where(QuestCategory.game_id == game_id).order_by(QuestCategory.name.asc())
+        select(QuestCategory)
+        .where(QuestCategory.game_id == game_id)
+        .order_by(QuestCategory.name.asc())
     ).all()
     return sorted(categories, key=lambda c: c.name.lower())
 
@@ -337,7 +366,9 @@ def update_checklist_item(
     item_id: int,
     payload: ChecklistItemUpdateRequest,
 ):
-    db_item = ensure_owned_checklist_item_with_detail(session, current_user, item_id, "Item not found")
+    db_item = ensure_owned_checklist_item_with_detail(
+        session, current_user, item_id, "Item not found"
+    )
     db_item.completed = payload.completed
     session.add(db_item)
     session.commit()
@@ -352,7 +383,9 @@ def delete_checklist_item(
     current_user: User = Depends(get_current_user),
     item_id: int,
 ):
-    db_item = ensure_owned_checklist_item_with_detail(session, current_user, item_id, "Item not found")
+    db_item = ensure_owned_checklist_item_with_detail(
+        session, current_user, item_id, "Item not found"
+    )
     session.delete(db_item)
     session.commit()
     return {"ok": True}
@@ -495,7 +528,12 @@ def read_game_sessions(
     game_id: int,
 ):
     ensure_owned_game(session, current_user, game_id)
-    query = select(DbSession).where(DbSession.game_id == game_id).order_by(DbSession.started_at.desc()).limit(10)
+    query = (
+        select(DbSession)
+        .where(DbSession.game_id == game_id)
+        .order_by(DbSession.started_at.desc())
+        .limit(10)
+    )
     return session.exec(query).all()
 
 
@@ -572,7 +610,9 @@ def sync_steam_manual_playtime(
     game = ensure_owned_game(session, current_user, game_id)
 
     if game.sync_type != "steam":
-        raise HTTPException(status_code=400, detail="Ручной Steam-синк доступен только для steam-игр")
+        raise HTTPException(
+            status_code=400, detail="Ручной Steam-синк доступен только для steam-игр"
+        )
 
     if not game.steam_app_id:
         raise HTTPException(status_code=400, detail="У игры не задан steam_app_id")
@@ -587,6 +627,7 @@ def sync_steam_manual_playtime(
     session.commit()
     return {"ok": True, "added_minutes": added_minutes}
 
+
 @router.post("/api/games/{game_id}/sync/steam/achievements", response_model=List[AchievementRead])
 def sync_steam_achievements_only(
     *,
@@ -597,7 +638,9 @@ def sync_steam_achievements_only(
     game = ensure_owned_game(session, current_user, game_id)
 
     if game.sync_type != "steam":
-        raise HTTPException(status_code=400, detail="Синхронизация достижений Steam доступна только для steam-игр")
+        raise HTTPException(
+            status_code=400, detail="Синхронизация достижений Steam доступна только для steam-игр"
+        )
 
     if not game.steam_app_id:
         raise HTTPException(status_code=400, detail="У игры не задан steam_app_id")

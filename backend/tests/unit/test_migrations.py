@@ -93,7 +93,11 @@ def test_alembic_upgrade_recovers_from_existing_schema_with_empty_version(monkey
 
     inspector = inspect(engine)
 
-    assert revision == "drop_legacy_agent_token"
+    assert revision == "add_performance_indexes"
     assert "agent_pair_codes" in inspector.get_table_names()
     quest_indexes = {index["name"] for index in inspector.get_indexes("quest_categories")}
+    session_indexes = {index["name"] for index in inspector.get_indexes("sessions")}
+    checklist_indexes = {index["name"] for index in inspector.get_indexes("checklist_items")}
     assert "uq_quest_categories_game_id_name" in quest_indexes
+    assert "ix_sessions_started_at" in session_indexes
+    assert "ix_checklist_items_sort_order" in checklist_indexes

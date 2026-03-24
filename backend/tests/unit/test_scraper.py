@@ -9,6 +9,20 @@ class DummyResponse:
         return None
 
 
+class DummyClient:
+    def __init__(self, text: str):
+        self._text = text
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def get(self, *_args, **_kwargs):
+        return DummyResponse(text=self._text)
+
+
 def test_parse_wiki_missions_extracts_categories_and_deduplicates(monkeypatch):
     html = """
     <div id="mw-content-text">
@@ -26,9 +40,9 @@ def test_parse_wiki_missions_extracts_categories_and_deduplicates(monkeypatch):
     """
 
     monkeypatch.setattr(
-        scraper.requests,
-        "get",
-        lambda *args, **kwargs: DummyResponse(text=html),
+        scraper.httpx,
+        "Client",
+        lambda *args, **kwargs: DummyClient(text=html),
     )
 
     items = scraper.parse_wiki_missions("https://example.com/wiki/test-page")
