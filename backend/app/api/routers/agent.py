@@ -18,7 +18,6 @@ from fastapi import (
     Depends,
     Header,
     HTTPException,
-    Query,
     Request,
     WebSocket,
     WebSocketDisconnect,
@@ -77,6 +76,7 @@ AGENT_REFRESH_TOKEN_TTL_DAYS = 30
 AGENT_SESSION_GAP_SECONDS = 30
 AGENT_PAIR_WINDOW_SECONDS = 300
 AGENT_PAIR_MAX_ATTEMPTS = 10
+AGENT_PENDING_LAUNCH_TTL_SECONDS = int(os.getenv("AGENT_PENDING_LAUNCH_TTL_SECONDS", "180"))
 WINDOWS_ABS_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 PAIR_ATTEMPTS: Dict[str, deque[float]] = {}
 PAIR_ATTEMPTS_LOCK = threading.Lock()
@@ -310,9 +310,59 @@ def normalize_and_validate_launch_path(launch_path: str) -> str:
     if not WINDOWS_ABS_PATH_RE.match(normalized):
         raise HTTPException(status_code=400, detail="launch_path must be an absolute Windows path")
     normalized = normalized.replace("/", "\\")
+    if any(ch in normalized for ch in ("\n", "\r", "\t")):
+        raise HTTPException(status_code=400, detail="launch_path contains control characters")
+    if any(ch in normalized for ch in ("|", "&", ";", "`")):
+        raise HTTPException(status_code=400, detail="launch_path contains forbidden characters")
+    if any(ch in normalized[2:] for ch in ('"', "*", "?", "<", ">", "|", ":")):
+        raise HTTPException(status_code=400, detail="launch_path contains forbidden Windows path characters")
+    tail_parts = [part for part in re.split(r"[\\/]+", normalized[3:]) if part]
+    if any(part in {".", ".."} for part in tail_parts):
+        raise HTTPException(status_code=400, detail="launch_path must not contain relative path segments")
     if not normalized.lower().endswith(".exe"):
         raise HTTPException(status_code=400, detail="launch_path must point to .exe")
+    allowed_roots_raw = (os.getenv("AGENT_ALLOWED_LAUNCH_ROOTS") or "").strip()
+    if allowed_roots_raw:
+        allowed_roots: List[str] = []
+        for item in re.split(r"[;,]", allowed_roots_raw):
+            root = item.strip().strip('"').replace("/", "\\").rstrip("\\")
+            if WINDOWS_ABS_PATH_RE.match(root):
+                allowed_roots.append(root)
+        if allowed_roots:
+            lower_path = normalized.lower()
+            is_allowed = any(
+                lower_path == root.lower() or lower_path.startswith(f"{root.lower()}\\")
+                for root in allowed_roots
+            )
+            if not is_allowed:
+                raise HTTPException(
+                    status_code=400,
+                    detail="launch_path is outside allowed roots configured in AGENT_ALLOWED_LAUNCH_ROOTS",
+                )
     return normalized
+
+
+def _extract_ws_agent_token(websocket: WebSocket) -> str:
+    token = _extract_bearer_token(websocket.headers.get("authorization") or "")
+    if token:
+        return token
+    if (websocket.query_params.get("token") or "").strip():
+        raise HTTPException(status_code=401, detail="Query-string websocket token is not allowed")
+    raise HTTPException(status_code=401, detail="Missing access token")
+
+
+def _is_pending_launch_expired(config: AgentConfig, *, now=None) -> bool:
+    if not config.pending_launch_requested_at:
+        return True
+    current = now or utc_now()
+    age = current - config.pending_launch_requested_at
+    return age.total_seconds() > AGENT_PENDING_LAUNCH_TTL_SECONDS
+
+
+def _clear_pending_launch(config: AgentConfig) -> None:
+    config.pending_launch_id = None
+    config.pending_launch_path = None
+    config.pending_launch_requested_at = None
 
 
 def extract_exe_name(launch_path: str) -> str:
@@ -586,10 +636,10 @@ def get_agent_config(
 @router.websocket("/api/agent/ws")
 async def agent_ws(
     websocket: WebSocket,
-    token: str = Query(default=""),
 ):
     with Session(engine) as session:
         try:
+            token = _extract_ws_agent_token(websocket)
             user = _get_agent_user_by_token(session, token)
         except HTTPException as exc:
             raise WebSocketException(
@@ -627,15 +677,30 @@ def get_agent_commands(
         )
     )
     configs = session.exec(query).all()
-    return {
-        "items": [
+    now = utc_now()
+    stale_count = 0
+    items: List[Dict[str, Any]] = []
+    for cfg in configs:
+        if _is_pending_launch_expired(cfg, now=now):
+            _clear_pending_launch(cfg)
+            cfg.last_launch_status = "error"
+            cfg.last_launch_error = "Launch request expired before agent fetch"
+            cfg.last_launch_at = now
+            cfg.updated_at = now
+            session.add(cfg)
+            stale_count += 1
+            continue
+        items.append(
             {
                 "game_id": cfg.game_id,
                 "request_id": cfg.pending_launch_id,
                 "launch_path": cfg.pending_launch_path,
             }
-            for cfg in configs
-        ]
+        )
+    if stale_count:
+        session.commit()
+    return {
+        "items": items
     }
 
 
@@ -653,6 +718,16 @@ def ack_agent_command(
     ).first()
     if not config or not config.pending_launch_id:
         return {"ok": True, "status": "ignored"}
+    if _is_pending_launch_expired(config):
+        _clear_pending_launch(config)
+        config.last_launch_status = "error"
+        config.last_launch_error = "Launch request expired before ack"
+        config.last_launch_at = utc_now()
+        config.updated_at = utc_now()
+        session.add(config)
+        session.commit()
+        WS_MANAGER.notify_commands_updated(agent_user.id)
+        return {"ok": True, "status": "ignored_expired"}
 
     if config.pending_launch_id != req.request_id:
         return {"ok": True, "status": "ignored"}
@@ -660,9 +735,7 @@ def ack_agent_command(
     config.last_launch_status = "ok" if req.success else "error"
     config.last_launch_error = None if req.success else (req.error or "Unknown launch error")
     config.last_launch_at = utc_now()
-    config.pending_launch_id = None
-    config.pending_launch_path = None
-    config.pending_launch_requested_at = None
+    _clear_pending_launch(config)
     config.updated_at = utc_now()
     session.add(config)
     session.commit()
@@ -949,6 +1022,10 @@ def request_agent_launch(
     launch_path = normalize_and_validate_launch_path(config.launch_path or game.launch_path or "")
     if not launch_path:
         raise HTTPException(status_code=400, detail="Сначала сохраните путь к исполняемому файлу игры")
+    if config.pending_launch_id and not _is_pending_launch_expired(config):
+        raise HTTPException(status_code=409, detail="Предыдущая команда запуска еще ожидает выполнения агентом")
+    if config.pending_launch_id and _is_pending_launch_expired(config):
+        _clear_pending_launch(config)
 
     config.pending_launch_id = str(uuid4())
     config.pending_launch_path = launch_path

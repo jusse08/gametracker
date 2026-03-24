@@ -110,7 +110,7 @@ async def lifespan(_: FastAPI):
 
 
 logging.basicConfig(
-    level=getattr(logging, (os.getenv("LOG_LEVEL") or "INFO").upper(), logging.INFO),
+    level=getattr(logging, (os.getenv("LOG_LEVEL") or "WARNING").upper(), logging.WARNING),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 

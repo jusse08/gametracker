@@ -1,21 +1,23 @@
 from typing import Callable, Dict, List, Optional, Tuple
-from urllib.parse import quote
-
 import requests
 
 from time_utils import utc_now_isoformat
 
 
-def build_ws_url(server_url: str, agent_token: str) -> str:
+def build_ws_url(server_url: str) -> str:
     ws_scheme = "wss" if server_url.startswith("https://") else "ws"
     host = server_url.split("://", 1)[-1]
-    return f"{ws_scheme}://{host}/api/agent/ws?token={quote(agent_token)}"
+    return f"{ws_scheme}://{host}/api/agent/ws"
 
 
 def build_ws_log_url(server_url: str) -> str:
     ws_scheme = "wss" if server_url.startswith("https://") else "ws"
     host = server_url.split("://", 1)[-1]
-    return f"{ws_scheme}://{host}/api/agent/ws?token=***"
+    return f"{ws_scheme}://{host}/api/agent/ws"
+
+
+def build_ws_headers(agent_token: str) -> Dict[str, str]:
+    return {"Authorization": f"Bearer {agent_token}"}
 
 
 def _error_message(exc: requests.RequestException) -> str:

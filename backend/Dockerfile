@@ -29,4 +29,4 @@ ENV BACKEND_PORT=8000
 EXPOSE 8000
 
 # Run the API server after the schema is prepared by scripts/manage_db.py or the compose migrate service
-CMD ["sh", "-c", "uvicorn app.main:app --host ${BACKEND_HOST:-0.0.0.0} --port ${BACKEND_PORT:-8000} --ws websockets"]
+CMD ["sh", "-c", "uvicorn app.main:app --host ${BACKEND_HOST:-0.0.0.0} --port ${BACKEND_PORT:-8000} --ws websockets --no-access-log --log-level ${UVICORN_LOG_LEVEL:-warning}"]

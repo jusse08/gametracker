@@ -36,6 +36,9 @@ async def test_configure_agent_rejects_dangerous_launch_paths(client, auth_heade
         "https://example.com/game.exe",
         "relative\\game.exe",
         "C:\\Games\\game.ps1",
+        "C:\\Games\\..\\Windows\\system32\\cmd.exe",
+        "C:\\Games\\My|Game\\game.exe",
+        "C:\\Games\\MyGame\\game.exe:evil-stream",
     ]
 
     for launch_path in bad_paths:

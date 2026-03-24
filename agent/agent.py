@@ -116,8 +116,32 @@ def normalize_launch_path(launch_path: str) -> Tuple[str, Optional[str]]:
         return "", "path must be absolute Windows path"
 
     normalized = path.replace("/", "\\")
+    if any(ch in normalized for ch in ("\n", "\r", "\t")):
+        return "", "path contains control characters"
+    if any(ch in normalized for ch in ("|", "&", ";", "`")):
+        return "", "path contains forbidden characters"
+    if any(ch in normalized[2:] for ch in ('"', "*", "?", "<", ">", "|", ":")):
+        return "", "path contains forbidden Windows path characters"
+    tail_parts = [part for part in re.split(r"[\\/]+", normalized[3:]) if part]
+    if any(part in {".", ".."} for part in tail_parts):
+        return "", "path must not contain relative path segments"
     if not normalized.lower().endswith(".exe"):
         return "", "path must point to .exe"
+    allowed_roots_raw = (os.getenv("AGENT_ALLOWED_LAUNCH_ROOTS") or "").strip()
+    if allowed_roots_raw:
+        allowed_roots: List[str] = []
+        for item in re.split(r"[;,]", allowed_roots_raw):
+            root = item.strip().strip('"').replace("/", "\\").rstrip("\\")
+            if WINDOWS_ABS_PATH_RE.match(root):
+                allowed_roots.append(root)
+        if allowed_roots:
+            lower_path = normalized.lower()
+            is_allowed = any(
+                lower_path == root.lower() or lower_path.startswith(f"{root.lower()}\\")
+                for root in allowed_roots
+            )
+            if not is_allowed:
+                return "", "path is outside allowed roots"
     return normalized, None
 
 
@@ -133,12 +157,19 @@ def get_agent_headers(agent_token: str) -> Dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def build_ws_url(server_url: str, agent_token: str) -> str:
-    return net_api.build_ws_url(server_url, agent_token)
+def build_ws_url(server_url: str) -> str:
+    return net_api.build_ws_url(server_url)
 
 
 def build_ws_log_url(server_url: str) -> str:
     return net_api.build_ws_log_url(server_url)
+
+
+def build_ws_headers(agent_token: str) -> Dict[str, str]:
+    token, err = validate_agent_token(agent_token)
+    if err:
+        raise ValueError(f"Invalid agent token: {err}")
+    return net_api.build_ws_headers(token)
 
 
 def get_agent_config(server_url: str, agent_token: str) -> Optional[List[Dict]]:
@@ -343,6 +374,7 @@ def ws_worker(
         refresh_if_needed_fn=refresh_if_needed,
         validate_agent_token_fn=validate_agent_token,
         build_ws_url_fn=build_ws_url,
+        build_ws_headers_fn=build_ws_headers,
         build_ws_log_url_fn=build_ws_log_url,
         debug_log_fn=debug_log,
         ws_reconnect_delay_seconds=WS_RECONNECT_DELAY_SECONDS,

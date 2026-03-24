@@ -116,7 +116,8 @@ def ws_worker(
     validate_server_url_fn: Callable[[str], Tuple[str, Optional[str]]],
     refresh_if_needed_fn: Callable[[object, str], Tuple[str, Optional[str]]],
     validate_agent_token_fn: Callable[[str], Tuple[str, Optional[str]]],
-    build_ws_url_fn: Callable[[str, str], str],
+    build_ws_url_fn: Callable[[str], str],
+    build_ws_headers_fn: Callable[[str], Dict[str, str]],
     build_ws_log_url_fn: Callable[[str], str],
     debug_log_fn: Callable[[str, str], None],
     ws_reconnect_delay_seconds: int,
@@ -156,9 +157,10 @@ def ws_worker(
         force_reconnect_now = False
         shared_state.set_last_error("")
         try:
-            ws_url = build_ws_url_fn(valid_server_url, valid_token)
+            ws_url = build_ws_url_fn(valid_server_url)
+            ws_headers = build_ws_headers_fn(valid_token)
             debug_log_fn("WS", f"Connecting to {build_ws_log_url_fn(valid_server_url)}")
-            ws = websocket_module.create_connection(ws_url, timeout=5)
+            ws = websocket_module.create_connection(ws_url, timeout=5, header=ws_headers)
             ws.settimeout(1)
             shared_state.set_ws_connected(True)
             shared_state.mark_api_ok(True)
